@@ -1,0 +1,509 @@
+{
+  "meta": {
+    "name": "斗地主",
+    "version": "1.0",
+    "maxPlayers": 3
+  },
+  "l1": {
+    "cards": [
+      {
+        "id": "spade_3",
+        "name": "♠3",
+        "rank": "3",
+        "suit": "spade",
+        "value": 3
+      },
+      {
+        "id": "heart_3",
+        "name": "♥3",
+        "rank": "3",
+        "suit": "heart",
+        "value": 3
+      },
+      {
+        "id": "club_3",
+        "name": "♣3",
+        "rank": "3",
+        "suit": "club",
+        "value": 3
+      },
+      {
+        "id": "diamond_3",
+        "name": "♦3",
+        "rank": "3",
+        "suit": "diamond",
+        "value": 3
+      },
+      {
+        "id": "spade_4",
+        "name": "♠4",
+        "rank": "4",
+        "suit": "spade",
+        "value": 4
+      },
+      {
+        "id": "heart_4",
+        "name": "♥4",
+        "rank": "4",
+        "suit": "heart",
+        "value": 4
+      },
+      {
+        "id": "club_4",
+        "name": "♣4",
+        "rank": "4",
+        "suit": "club",
+        "value": 4
+      },
+      {
+        "id": "diamond_4",
+        "name": "♦4",
+        "rank": "4",
+        "suit": "diamond",
+        "value": 4
+      },
+      {
+        "id": "spade_5",
+        "name": "♠5",
+        "rank": "5",
+        "suit": "spade",
+        "value": 5
+      },
+      {
+        "id": "heart_5",
+        "name": "♥5",
+        "rank": "5",
+        "suit": "heart",
+        "value": 5
+      },
+      {
+        "id": "club_5",
+        "name": "♣5",
+        "rank": "5",
+        "suit": "club",
+        "value": 5
+      },
+      {
+        "id": "diamond_5",
+        "name": "♦5",
+        "rank": "5",
+        "suit": "diamond",
+        "value": 5
+      },
+      {
+        "id": "spade_6",
+        "name": "♠6",
+        "rank": "6",
+        "suit": "spade",
+        "value": 6
+      },
+      {
+        "id": "heart_6",
+        "name": "♥6",
+        "rank": "6",
+        "suit": "heart",
+        "value": 6
+      },
+      {
+        "id": "club_6",
+        "name": "♣6",
+        "rank": "6",
+        "suit": "club",
+        "value": 6
+      },
+      {
+        "id": "diamond_6",
+        "name": "♦6",
+        "rank": "6",
+        "suit": "diamond",
+        "value": 6
+      },
+      {
+        "id": "spade_7",
+        "name": "♠7",
+        "rank": "7",
+        "suit": "spade",
+        "value": 7
+      },
+      {
+        "id": "heart_7",
+        "name": "♥7",
+        "rank": "7",
+        "suit": "heart",
+        "value": 7
+      },
+      {
+        "id": "club_7",
+        "name": "♣7",
+        "rank": "7",
+        "suit": "club",
+        "value": 7
+      },
+      {
+        "id": "diamond_7",
+        "name": "♦7",
+        "rank": "7",
+        "suit": "diamond",
+        "value": 7
+      },
+      {
+        "id": "spade_8",
+        "name": "♠8",
+        "rank": "8",
+        "suit": "spade",
+        "value": 8
+      },
+      {
+        "id": "heart_8",
+        "name": "♥8",
+        "rank": "8",
+        "suit": "heart",
+        "value": 8
+      },
+      {
+        "id": "club_8",
+        "name": "♣8",
+        "rank": "8",
+        "suit": "club",
+        "value": 8
+      },
+      {
+        "id": "diamond_8",
+        "name": "♦8",
+        "rank": "8",
+        "suit": "diamond",
+        "value": 8
+      },
+      {
+        "id": "spade_9",
+        "name": "♠9",
+        "rank": "9",
+        "suit": "spade",
+        "value": 9
+      },
+      {
+        "id": "heart_9",
+        "name": "♥9",
+        "rank": "9",
+        "suit": "heart",
+        "value": 9
+      },
+      {
+        "id": "club_9",
+        "name": "♣9",
+        "rank": "9",
+        "suit": "club",
+        "value": 9
+      },
+      {
+        "id": "diamond_9",
+        "name": "♦9",
+        "rank": "9",
+        "suit": "diamond",
+        "value": 9
+      },
+      {
+        "id": "spade_10",
+        "name": "♠10",
+        "rank": "10",
+        "suit": "spade",
+        "value": 10
+      },
+      {
+        "id": "heart_10",
+        "name": "♥10",
+        "rank": "10",
+        "suit": "heart",
+        "value": 10
+      },
+      {
+        "id": "club_10",
+        "name": "♣10",
+        "rank": "10",
+        "suit": "club",
+        "value": 10
+      },
+      {
+        "id": "diamond_10",
+        "name": "♦10",
+        "rank": "10",
+        "suit": "diamond",
+        "value": 10
+      },
+      {
+        "id": "spade_J",
+        "name": "♠J",
+        "rank": "J",
+        "suit": "spade",
+        "value": 11
+      },
+      {
+        "id": "heart_J",
+        "name": "♥J",
+        "rank": "J",
+        "suit": "heart",
+        "value": 11
+      },
+      {
+        "id": "club_J",
+        "name": "♣J",
+        "rank": "J",
+        "suit": "club",
+        "value": 11
+      },
+      {
+        "id": "diamond_J",
+        "name": "♦J",
+        "rank": "J",
+        "suit": "diamond",
+        "value": 11
+      },
+      {
+        "id": "spade_Q",
+        "name": "♠Q",
+        "rank": "Q",
+        "suit": "spade",
+        "value": 12
+      },
+      {
+        "id": "heart_Q",
+        "name": "♥Q",
+        "rank": "Q",
+        "suit": "heart",
+        "value": 12
+      },
+      {
+        "id": "club_Q",
+        "name": "♣Q",
+        "rank": "Q",
+        "suit": "club",
+        "value": 12
+      },
+      {
+        "id": "diamond_Q",
+        "name": "♦Q",
+        "rank": "Q",
+        "suit": "diamond",
+        "value": 12
+      },
+      {
+        "id": "spade_K",
+        "name": "♠K",
+        "rank": "K",
+        "suit": "spade",
+        "value": 13
+      },
+      {
+        "id": "heart_K",
+        "name": "♥K",
+        "rank": "K",
+        "suit": "heart",
+        "value": 13
+      },
+      {
+        "id": "club_K",
+        "name": "♣K",
+        "rank": "K",
+        "suit": "club",
+        "value": 13
+      },
+      {
+        "id": "diamond_K",
+        "name": "♦K",
+        "rank": "K",
+        "suit": "diamond",
+        "value": 13
+      },
+      {
+        "id": "spade_A",
+        "name": "♠A",
+        "rank": "A",
+        "suit": "spade",
+        "value": 14
+      },
+      {
+        "id": "heart_A",
+        "name": "♥A",
+        "rank": "A",
+        "suit": "heart",
+        "value": 14
+      },
+      {
+        "id": "club_A",
+        "name": "♣A",
+        "rank": "A",
+        "suit": "club",
+        "value": 14
+      },
+      {
+        "id": "diamond_A",
+        "name": "♦A",
+        "rank": "A",
+        "suit": "diamond",
+        "value": 14
+      },
+      {
+        "id": "spade_2",
+        "name": "♠2",
+        "rank": "2",
+        "suit": "spade",
+        "value": 15
+      },
+      {
+        "id": "heart_2",
+        "name": "♥2",
+        "rank": "2",
+        "suit": "heart",
+        "value": 15
+      },
+      {
+        "id": "club_2",
+        "name": "♣2",
+        "rank": "2",
+        "suit": "club",
+        "value": 15
+      },
+      {
+        "id": "diamond_2",
+        "name": "♦2",
+        "rank": "2",
+        "suit": "diamond",
+        "value": 15
+      },
+      {
+        "id": "joker_small",
+        "name": "小王",
+        "rank": "small_joker",
+        "suit": "joker",
+        "value": 16
+      },
+      {
+        "id": "joker_big",
+        "name": "大王",
+        "rank": "big_joker",
+        "suit": "joker",
+        "value": 17
+      }
+    ],
+    "players": {
+      "count": 3,
+      "initialResources": {}
+    },
+    "uiLayout": {
+      "slots": {
+        "top_bar": {
+          "component": "info_area"
+        },
+        "main_area": {
+          "component": "play_area"
+        },
+        "bottom_bar": {
+          "component": "hand_area",
+          "params": {
+            "maxSelect": 20
+          }
+        }
+      },
+      "presetSlots": [
+        "top_bar",
+        "main_area",
+        "bottom_bar"
+      ]
+    },
+    "visibility": {
+      "players[*].hand": {
+        "mode": "owner_only",
+        "description": "手牌仅本人可见"
+      },
+      "players[*].handCount": {
+        "mode": "full",
+        "description": "手牌数量所有人可见"
+      },
+      "bottomCards": {
+        "mode": "hidden",
+        "description": "叫地主前底牌不可见"
+      },
+      "deck": {
+        "mode": "hidden",
+        "description": "发牌后牌堆无意义"
+      },
+      "discard": {
+        "mode": "full",
+        "description": "出牌区所有人可见"
+      }
+    }
+  },
+  "l2": {
+    "rules": [
+      {
+        "trigger": "on_game_start",
+        "actions": [
+          {
+            "type": "deal_cards"
+          },
+          {
+            "type": "enter_calling"
+          }
+        ]
+      },
+      {
+        "trigger": "on_call_phase",
+        "actions": [
+          {
+            "type": "wait_for_call"
+          }
+        ]
+      },
+      {
+        "trigger": "on_landlord_chosen",
+        "actions": [
+          {
+            "type": "give_bottom_cards"
+          },
+          {
+            "type": "enter_playing"
+          }
+        ]
+      },
+      {
+        "trigger": "on_turn_start",
+        "actions": [
+          {
+            "type": "wait_for_play"
+          }
+        ]
+      },
+      {
+        "trigger": "on_card_played",
+        "actions": [
+          {
+            "type": "validate_pattern"
+          },
+          {
+            "type": "update_discard"
+          },
+          {
+            "type": "next_turn"
+          }
+        ]
+      },
+      {
+        "trigger": "on_pass",
+        "actions": [
+          {
+            "type": "next_turn"
+          }
+        ]
+      },
+      {
+        "trigger": "on_cards_empty",
+        "actions": [
+          {
+            "type": "declare_winner"
+          }
+        ]
+      }
+    ]
+  },
+  "l3": "// 斗地主牌型识别\n// 由 l3_pattern.test.ts 编译生成\nregisterFunction('checkPattern', function(state, cards) {\n  var n = cards.length;\n  if (n === 0) return null;\n  if (n === 2) {\n    var ranks = cards.map(function(c) { return c.rank; });\n    if (ranks.indexOf('small_joker') >= 0 && ranks.indexOf('big_joker') >= 0) {\n      return { type: 'rocket', mainValue: 18 };\n    }\n  }\n  var counts = new Map();\n  for (var i = 0; i < cards.length; i++) {\n    var v = cards[i].value;\n    counts.set(v, (counts.get(v) || 0) + 1);\n  }\n  var values = Array.from(counts.keys()).sort(function(a, b) { return a - b; });\n  var countVals = Array.from(counts.values());\n  if (n === 4 && counts.size === 1) return { type: 'bomb', mainValue: values[0] };\n  if (n === 1) return { type: 'single', mainValue: values[0] };\n  if (n === 2 && counts.size === 1) return { type: 'pair', mainValue: values[0] };\n  if (n === 3 && counts.size === 1) return { type: 'triple', mainValue: values[0] };\n  if (n === 4 && countVals.indexOf(3) >= 0 && countVals.indexOf(1) >= 0) {\n    var tv = values.find(function(v) { return counts.get(v) === 3; });\n    return { type: 'triple_single', mainValue: tv };\n  }\n  if (n === 5 && countVals.indexOf(3) >= 0 && countVals.indexOf(2) >= 0) {\n    var tv2 = values.find(function(v) { return counts.get(v) === 3; });\n    return { type: 'triple_pair', mainValue: tv2 };\n  }\n  if (n >= 5 && countVals.every(function(c) { return c === 1; })) {\n    var straight = true;\n    for (var j = 1; j < values.length; j++) { if (values[j] !== values[j-1] + 1) { straight = false; break; } }\n    if (straight && values[values.length-1] < 15) return { type: 'straight', mainValue: values[values.length-1], length: n };\n  }\n  if (n >= 6 && n % 2 === 0 && countVals.every(function(c) { return c === 2; })) {\n    var sp = true;\n    for (var k = 1; k < values.length; k++) { if (values[k] !== values[k-1] + 1) { sp = false; break; } }\n    if (sp && values[values.length-1] < 15) return { type: 'straight_pair', mainValue: values[values.length-1], length: n/2 };\n  }\n  return null;\n});\n\nregisterFunction('comparePatterns', function(state, a, b) {\n  if (a.type === 'rocket') return 1;\n  if (b.type === 'rocket') return -1;\n  if (a.type === 'bomb' && b.type !== 'bomb') return 1;\n  if (b.type === 'bomb' && a.type !== 'bomb') return -1;\n  if (a.type === b.type && a.length === b.length) return a.mainValue - b.mainValue;\n  return 0;\n});\n"
+}

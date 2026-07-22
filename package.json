@@ -1,0 +1,30 @@
+{
+  "name": "boardgame-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "鍘讳腑蹇冨寲鐨勯\udc80氱敤妗屾父妯℃嫙鍣\udca8",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lan": "vite --host"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.4.0",
+    "vite": "^5.4.0",
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "@moku-labs/room": "^0.4.0",
+    "motion": "^12.42.2",
+    "nostr-tools": "^2.24.0",
+    "qrcode": "^1.5.4",
+    "vite-plugin-pwa": "^1.3.0"
+  }
+}

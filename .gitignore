@@ -1,0 +1,11 @@
+node_modules
+dist
+description
+*.png
+tools/_*
+
+*.sketch
+assets/design
+assets/fonts
+.vercel
+p1.png

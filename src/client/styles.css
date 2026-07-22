@@ -1,0 +1,119 @@
+/* ============================================================
+   BoardGameSimulator — Apple iOS 27 colors (from sketch)
+   ============================================================ */
+:root {
+  --bg: #ffffff; --bg2: #f2f2f7; --bg-card: #ffffff;
+  --label: #000000; --label2: rgba(60,60,67,0.60); --label3: rgba(60,60,67,0.30);
+  --fill: rgba(120,120,120,0.20); --fill2: rgba(120,120,128,0.16); --fill3: rgba(118,118,128,0.12);
+  --blue: #0088ff; --red: #ff383c; --green: #34c759;
+  --sep: rgba(60,60,67,0.29);
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  --radius: 10px; --nav-h: 44px; --safe: env(safe-area-inset-bottom, 0px);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;font-family:var(--font);font-size:17px;line-height:1.45;color:var(--label);background:var(--bg);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+#app{width:100%;height:100%}
+
+/* === Merged scroll (home + library) === */
+.scroll-host{width:100%;height:100%;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.scroll-host::-webkit-scrollbar{display:none}
+
+/* Home section */
+.home-sec{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.home-logo{position:absolute;top:calc(50% - 80px);transform:translateY(-50%);width:81px;height:81px;opacity:.85}
+.home-logo img{width:100%;height:100%}
+
+/* Input — absolute centered */
+.input-wrap{position:absolute;top:50%;transform:translateY(-50%);width:320px;height:44px}
+.input-box{
+  width:100%;height:100%;border:none;outline:none;
+  background:transparent;border-radius:22px;
+  border:1px solid var(--sep);
+  font-family:var(--font);font-size:20px;font-weight:400;
+  letter-spacing:.5px;color:var(--label);text-align:center;
+  text-transform:uppercase;padding:0 40px 0 12px;
+  transition:border-color 200ms,box-shadow 200ms
+}
+.input-box:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,136,255,0.12);outline:none}
+
+/* Arrow in input */
+.input-arrow{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity 180ms}
+.input-arrow.on{opacity:1;pointer-events:auto}
+.input-arrow svg{width:22px;height:22px}
+
+/* Library section */
+.lib-sec{padding-bottom:40px;min-height:100vh}
+
+/* Nav bar */
+.nav-bar{height:var(--nav-h);display:flex;align-items:center;justify-content:center;padding:0 16px;background:rgba(255,255,255,.85);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:.33px solid var(--sep);z-index:10}
+.nav-title{font-size:17px;font-weight:400;color:var(--label)}
+
+/* Floating home (#3) */
+.float-home{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom, 0px));right:20px;width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,.08);box-shadow:0 2px 16px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:9999;transition:transform 120ms,opacity 120ms}
+.float-home:active{transform:scale(.92);opacity:.8}
+
+/* Cells */
+.scroll{flex:1;overflow-y:auto;padding:16px}
+.sec-body{padding:16px}
+.cell{background:var(--bg-card);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:background 120ms}
+.cell+.cell{margin-top:8px}
+.cell:active{background:var(--fill3)}
+.cell-icon{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.cell-icon.game{background:var(--fill2)}
+.cell-icon.import{background:var(--blue);color:#fff}
+.cell-body{flex:1;min-width:0}
+.cell-title{font-size:17px;font-weight:400}
+.cell-subtitle{font-size:13px;color:var(--label2);margin-top:2px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:999px;font-family:var(--font);font-size:17px;font-weight:400;padding:12px 24px;cursor:pointer;transition:opacity 80ms,transform 80ms}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-secondary{background:var(--fill2);color:var(--blue)}
+.btn-block{width:100%}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn:disabled:active{transform:none}
+
+/* Section header */
+.section-hdr{padding:20px 0 8px;font-size:13px;color:var(--label2);text-transform:uppercase;letter-spacing:.5px}
+
+/* Room code */
+.room-code{text-align:center;padding:32px 0}
+.room-code .code{font-size:32px;font-weight:700;letter-spacing:6px;color:var(--blue)}
+
+/* Player row */
+.player-row{padding:12px 16px;display:flex;align-items:center;gap:8px;background:var(--bg-card);border-radius:var(--radius);margin-bottom:4px}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot.g{background:var(--green)}
+
+/* === Game Screen === */
+.game-top{height:var(--nav-h);display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.85);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:.33px solid var(--sep);font-size:15px;color:var(--label2)}
+.game-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;overflow:hidden;position:relative}
+.opp-row{display:flex;gap:3px;margin:4px 0}
+.opp-name{font-size:12px;color:var(--label2);text-align:center}
+.card-back{width:18px;height:26px;background:var(--fill2);border-radius:3px}
+.play-zone{min-height:70px;display:flex;align-items:center;justify-content:center;gap:3px;flex-wrap:wrap;padding:8px}
+.play-card{width:40px;height:56px;background:#fff;border-radius:5px;border:1px solid rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.play-info{width:100%;text-align:center;font-size:12px;color:var(--label2);margin-top:4px}
+.wait-text{color:var(--label3)}
+.call-btns{display:flex;gap:10px;padding:20px;justify-content:center}
+
+.game-bar-bot{padding:8px 16px calc(8px + var(--safe));background:rgba(255,255,255,.85);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-top:.33px solid var(--sep)}
+.hand-row{display:flex;justify-content:center;gap:2px;flex-wrap:wrap;min-height:72px;align-items:flex-end;padding-bottom:10px}
+.card-hand{width:46px;height:66px;background:#fff;border-radius:6px;border:1px solid rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:transform 150ms cubic-bezier(.25,.1,.25,1);user-select:none;touch-action:manipulation}
+.card-hand.sel{transform:translateY(-12px);border-color:var(--blue);border-width:2px;box-shadow:0 4px 12px rgba(0,136,255,.15)}
+.card-hand[data-suit="heart"],.card-hand[data-suit="diamond"]{color:var(--red)}
+.card-hand[data-suit="spade"],.card-hand[data-suit="club"]{color:#333}
+.action-row{display:flex;gap:8px;margin-top:2px}
+.action-row .btn{flex:1}
+
+.game-over-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:50;gap:16px}
+.go-text{font-size:28px;font-weight:700}
+
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.82);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;z-index:200;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+
+/* Accessibility */
+@media(prefers-reduced-motion:reduce){.card-hand,.btn{transition:none!important}.card-hand.sel{transform:none!important}.scroll-host{scroll-behavior:auto}}
+@media(prefers-reduced-transparency:reduce){.nav-bar,.game-top,.game-bar-bot{background:#fafafa;backdrop-filter:none;-webkit-backdrop-filter:none}}
+
+@media(min-width:401px){#app{width:400px;margin:0 auto;border-left:.33px solid var(--sep);border-right:.33px solid var(--sep)}}
