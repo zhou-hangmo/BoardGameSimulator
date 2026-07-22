@@ -106,11 +106,14 @@ renderer.init({
       players.push({ name: `玩家 ${idx}`, isHost: false });
       renderer.showLobby(room, players);
       p2p.sendRaw(peerId, 'assign', { playerIndex: idx });
+      // Notify all peers of updated player list
+      p2p.broadcastRaw('lobby', { players });
     });
 
     p2p.onPlayerLeave((peerId: string) => {
       const idx = p2p.getPeerIds().indexOf(peerId);
       if (idx >= 0) { players.splice(idx + 1, 1); renderer.showLobby(room, players); }
+      p2p.broadcastRaw('lobby', { players });
     });
 
     return room;
@@ -130,11 +133,15 @@ renderer.init({
     renderer.showWaitRoom(code, [{ name: '主持人', isHost: true }, { name: '你', isHost: false }]);
 
     // Joiner listens for state updates from host
+    
     p2p.onMessage((_peerId, data) => {
       const d = data as { type: string; payload: unknown };
       if (d.type === 'assign') {
         myIdx = (d.payload as { playerIndex: number }).playerIndex;
         renderer.showToast(`你已加入 - 位置 ${myIdx}`);
+      } else if (d.type === 'lobby') {
+        const plist = (d.payload as { players: { name: string; isHost: boolean }[] }).players;
+        if (plist) renderer.showWaitRoom(code, plist);
       } else if (d.type === 'state') {
         renderer.showGame(d.payload as PlayerView);
       } else if (d.type === 'error') {

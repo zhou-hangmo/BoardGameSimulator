@@ -47,7 +47,7 @@ export class Renderer {
       <div class="scroll-host" id="scroll-host">
         <section class="home-sec">
           <input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div>
-<div id="lan-qr" style="position:fixed;bottom:80px;right:16px;width:80px;height:80px;cursor:pointer;z-index:50;" title="分享局域网地址"></div>
+
           <div class="input-wrap" id="wrap">
             <input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" />
             <div class="input-arrow" id="arrow">${ARROW_SVG}</div>
@@ -61,21 +61,7 @@ export class Renderer {
         </section>
       </div>
       `;
-// LAN QR share
-    (async () => {
-      const { default: QRCode } = await import('qrcode');
-      const url = window.location.origin;
-      const dataUrl = await QRCode.toDataURL(url, { width: 80, margin: 1 });
-      const el = document.getElementById('lan-qr');
-      if (el) {
-        el.innerHTML = '<img src="' + dataUrl + '" style="width:100%;height:100%;"/>';
-        el.addEventListener('pointerdown', async () => {
-          try { await navigator.clipboard.writeText(url); this.showToast('已复制: ' + url); }
-          catch { this.showToast(url); }
-        });
-      }
-    })();
-    // Load QR button
+// Load QR button
     const loadInput = document.getElementById('load-input') as HTMLInputElement;
     loadInput?.addEventListener('change', async () => {
       const f = loadInput.files?.[0]; if (!f) return;
@@ -107,26 +93,32 @@ export class Renderer {
     // iOS-style drag + snap (scrollTop, overflow:auto)
     const host = document.getElementById('scroll-host')!;
     const homeBtn = document.getElementById('global-home')!;
-    let atHome = true; let dragging = false; let dragStart = 0;
+    let atHome = true; let dragging = false; let dragStart = 0; let offset = 0;
 
     const snapTo = (toHome: boolean) => {
       atHome = toHome;
-      host.scrollTo({ top: toHome ? 0 : host.scrollHeight, behavior: 'smooth' });
+      offset = toHome ? 0 : -host.clientHeight;
+      host.style.transition = "transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)";
+      host.style.transform = "translateY(" + offset + "px)";
       animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
       setTimeout(() => animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 }, { type: 'spring', bounce: 0.3, duration: 0.3 }), 250);
     };
-    const onDown = (y: number) => {
+    const isInteractive = (el: any) => { while(el){ if(["INPUT","BUTTON","TEXTAREA","SELECT"].includes(el.tagName)) return true; el=el.parentElement; } return false; };
+    const onDown = (y: number) => { if(isInteractive((window.event as any)?.target)) return;
       dragging = true; dragStart = y;
       animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
     };
     const onMove = (y: number) => {
       if (!dragging) return;
-      const dy = dragStart - y; const base = atHome ? 0 : host.clientHeight;
-      host.scrollTop = Math.max(0, Math.min(host.clientHeight, base + dy));
+      const dy = dragStart - y; const base = atHome ? 0 : -host.clientHeight;
+      offset = Math.max(-host.clientHeight, Math.min(0, base + dy));
+      host.style.transition = "none";
+      host.style.transform = "translateY(" + offset + "px)";
     };
     const onUp = () => {
       if (!dragging) return; dragging = false;
-      snapTo(Math.abs(host.scrollTop - (atHome ? 0 : host.clientHeight)) < host.clientHeight * 0.3 ? atHome : !atHome);
+      host.style.transition = "transform 0.35s cubic-bezier(0.23, 1, 0.32, 1)";
+      snapTo(Math.abs(offset + (atHome ? 0 : host.clientHeight)) < host.clientHeight * 0.3 ? atHome : !atHome);
     };
 
     host.addEventListener('touchstart', e => onDown(e.touches[0].clientY), { passive: true });
@@ -182,7 +174,7 @@ export class Renderer {
   }
   showLobby(code: string, ps: { name: string; isHost: boolean }[]): void {
     this.renderSecondary('房间大厅', `<div class="sec-body"><div class="room-code"><div class="code">${code}</div><div style="color:var(--label2);margin-top:4px;">分享给好友</div></div><div class="section-hdr">玩家 (${ps.length})</div>${ps.map(p=>`<div class="player-row"><span class="dot g"></span>${p.name}${p.isHost?' (主持人)':''}</div>`).join('')}<button id="btn-start" class="btn btn-primary btn-block" style="margin-top:16px;" ${ps.length<2?'disabled':''}>开始游戏</button><button id="btn-share" class="btn btn-secondary btn-block" style="margin-top:8px;">📤 分享房间</button></div>`);
-    document.getElementById('btn-start')?.addEventListener('pointerdown', () => this.cb.onStartGame());
+    document.getElementById('btn-start')?.addEventListener('pointerdown', (e: any) => { if((e.target as HTMLButtonElement).disabled) return; this.cb.onStartGame(); });
     document.getElementById('btn-share')?.addEventListener('pointerdown', () => this.cb.onShareRoom());
   }
   showWaitRoom(code: string, ps: { name: string; isHost: boolean }[]): void {

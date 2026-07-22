@@ -108,6 +108,10 @@ export class P2PManager {
     this.room?.sendTo(peerId, { type, payload });
   }
 
+  broadcastRaw(type: string, payload: unknown): void {
+    this.room?.broadcast({ type, payload });
+  }
+
   sendPlayerView(peerId: string, view: PlayerView): void {
     this.room?.sendTo(peerId, { type: 'state', payload: view });
   }

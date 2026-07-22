@@ -15,7 +15,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:var(--font);font-si
 #app{width:100%;height:100%}
 
 /* === Merged scroll (home + library) === */
-.scroll-host{width:100%;height:100%;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.scroll-host{width:100%;height:100%;overflow:hidden;-webkit-overflow-scrolling:touch}
 .scroll-host::-webkit-scrollbar{display:none}
 
 /* Home section */
