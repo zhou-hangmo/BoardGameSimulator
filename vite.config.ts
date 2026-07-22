@@ -36,7 +36,7 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         icons: [
-          { src: '/assets/icons/app-logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/BoardGameSimulator/assets/icons/app-logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
         ],
       },
     }),
