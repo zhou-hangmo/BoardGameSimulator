@@ -1,6 +1,7 @@
 // ============================================================
 // BoardGameSimulator — Renderer v3 (merged scroll, floating home, iOS colors)
 // ============================================================
+/// <reference types="vite/client" />
 import { animate } from 'motion';
 import type { PlayerView } from '../core/types';
 
@@ -45,7 +46,7 @@ export class Renderer {
     this.el.innerHTML = `
       <div class="scroll-host" id="scroll-host">
         <section class="home-sec">
-          <input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="/assets/icons/app-logo.svg" alt="logo" /></div>
+          <input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div>
 <div id="lan-qr" style="position:fixed;bottom:80px;right:16px;width:80px;height:80px;cursor:pointer;z-index:50;" title="分享局域网地址"></div>
           <div class="input-wrap" id="wrap">
             <input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" />
