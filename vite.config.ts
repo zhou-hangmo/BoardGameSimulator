@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   root: '.',
-  base: './',
+  base: '/BoardGameSimulator/',
   build: {
     outDir: 'docs',
     target: 'es2020',
