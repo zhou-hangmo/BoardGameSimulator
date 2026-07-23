@@ -97,32 +97,32 @@ export class Renderer {
 
     const snapTo = (toHome: boolean) => {
       atHome = toHome;
-      offset = toHome ? 0 : -host.clientHeight;
+      offset = toHome ? 0 : -window.innerHeight;
       host.style.transition = "transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)";
       host.style.transform = "translateY(" + offset + "px)";
       animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
       setTimeout(() => animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 }, { type: 'spring', bounce: 0.3, duration: 0.3 }), 250);
     };
     let inputFocused = false;
-    const isInteractive = (el: any) => inputFocused || (() => { while(el){ if(["INPUT","BUTTON","TEXTAREA","SELECT"].includes(el.tagName)) return true; el=el.parentElement; } return false; })();
+    const isInteractive = (el: any): boolean => { while(el){ if(['INPUT','BUTTON','TEXTAREA','SELECT'].includes(el.tagName)) return true; el=el.parentElement; } return false; };
     const onDown = (y: number) => { if(isInteractive((window.event as any)?.target)) return;
       dragging = true; dragStart = y;
       animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
     };
     const onMove = (y: number) => {
       if (!dragging) return;
-      const dy = dragStart - y; const base = atHome ? 0 : -host.clientHeight;
-      offset = Math.max(-host.clientHeight, Math.min(0, base - dy));
+      const dy = dragStart - y; const base = atHome ? 0 : -window.innerHeight;
+      offset = Math.max(-window.innerHeight, Math.min(0, base - dy));
       host.style.transition = "none";
       host.style.transform = "translateY(" + offset + "px)";
     };
     const onUp = () => {
       if (!dragging) return; dragging = false;
       host.style.transition = "transform 0.35s cubic-bezier(0.23, 1, 0.32, 1)";
-      snapTo(Math.abs(offset + (atHome ? 0 : host.clientHeight)) < host.clientHeight * 0.3 ? atHome : !atHome);
+      snapTo(Math.abs(offset + (atHome ? 0 : window.innerHeight)) < window.innerHeight * 0.3 ? atHome : !atHome);
     };
 
-    host.addEventListener('touchstart', e => onDown(e.touches[0].clientY), { passive: true });
+    host.addEventListener('touchstart', e => { if(inputFocused || isInteractive(e.target)) return; onDown(e.touches[0].clientY); }, { passive: true });
     host.addEventListener('touchmove', e => onMove(e.touches[0].clientY), { passive: true });
     host.addEventListener('touchend', () => onUp());
     host.addEventListener('mousedown', e => { if(isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });

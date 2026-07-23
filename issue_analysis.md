@@ -287,3 +287,27 @@
 - **Resolution**: 2026-07-23 — Option A applied
 
 ---
+
+### IS-016: showHomeLibrary 重建DOM后事件监听器丢失
+- **Status**: ✅ Resolved
+- **Priority**: 🔴 Critical
+- **Category**: Logic Bug
+- **File**: src/client/renderer.ts
+- **Line**: 43
+- **Description**: init() 绑定的事件监听器（touchstart/move/end等）在 showHomeLibrary() 通过 innerHTML 重建DOM后全部丢失。由于host引用指向已移除的元素，后续 transform 修改无视觉变化。
+- **Impact**: 翻转后页面假死——transform 修改不生效，无法翻回，游戏库界面空白。
+- **Fix Options**: A: showHomeLibrary 内部重建监听器
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
+
+### IS-017: tap与drag未区分导致输入框无法关闭
+- **Status**: ✅ Resolved
+- **Priority**: 🔴 Critical
+- **Category**: Logic Bug
+- **File**: src/client/renderer.ts
+- **Line**: 121
+- **Description**: onUp 中即使手指未移动（tap），也执行snapTo逻辑。用户点击空白处想关闭键盘时，3px以内的微小抖动都会触发翻页动画。
+- **Impact**: 输入框聚焦后无法通过点击空白处关闭键盘。
+- **Fix Options**: A: 移动<5px不触发snap，直接return
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
