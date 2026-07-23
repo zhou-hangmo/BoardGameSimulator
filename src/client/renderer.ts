@@ -82,6 +82,8 @@ export class Renderer {
     // Input
     const input = document.getElementById('code-input') as HTMLInputElement;
     const arrow = document.getElementById('arrow')!;
+    input.addEventListener('focus', () => { inputFocused = true; });
+    input.addEventListener('blur', () => { inputFocused = false; });
     input.addEventListener('input', () => {
       const v = input.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase(); input.value = v;
       v.length === 6 ? arrow.classList.add('on') : arrow.classList.remove('on');
@@ -90,36 +92,53 @@ export class Renderer {
       if (input.value.length !== 6) return; input.blur();
       try { await this.cb.onJoinRoom(input.value); } catch { this.showToast('加入失败'); }
     });
-    // iOS-style drag + snap (scrollTop, overflow:auto)
+    // iOS-style drag + snap (transform-based)
     const host = document.getElementById('scroll-host')!;
     const homeBtn = document.getElementById('global-home')!;
     let atHome = true; let dragging = false; let dragStart = 0; let offset = 0;
+    let snapAnim: ReturnType<typeof animate> | null = null;
+    let btnAnim: ReturnType<typeof animate> | null = null;
+
+    const vh = () => window.innerHeight;
 
     const snapTo = (toHome: boolean) => {
       atHome = toHome;
-      offset = toHome ? 0 : -window.innerHeight;
-      host.style.transition = "transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)";
-      host.style.transform = "translateY(" + offset + "px)";
-      animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
-      setTimeout(() => animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 }, { type: 'spring', bounce: 0.3, duration: 0.3 }), 250);
+      offset = toHome ? 0 : -vh();
+      snapAnim?.stop(); snapAnim = animate(host, { transform: `translateY(${offset}px)` },
+        { type: 'spring', stiffness: 300, damping: 28 });
+      btnAnim?.stop();
+      btnAnim = animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
+      setTimeout(() => {
+        btnAnim?.stop();
+        btnAnim = animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 },
+          { type: 'spring', bounce: 0.3, duration: 0.3 });
+      }, 200);
     };
+    snapTo(true); // initial position
+
     let inputFocused = false;
-    const isInteractive = (el: any): boolean => { while(el){ if(['INPUT','BUTTON','TEXTAREA','SELECT'].includes(el.tagName)) return true; el=el.parentElement; } return false; };
-    const onDown = (y: number) => { if(isInteractive((window.event as any)?.target)) return;
+    const isInteractive = (el: any): boolean => {
+      while (el) { if (['INPUT','BUTTON','TEXTAREA','SELECT'].includes(el.tagName)) return true; el = el.parentElement; }
+      return false;
+    };
+    const onDown = (y: number) => {
       dragging = true; dragStart = y;
-      animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
+      btnAnim?.stop();
+      btnAnim = animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
     };
     const onMove = (y: number) => {
       if (!dragging) return;
-      const dy = dragStart - y; const base = atHome ? 0 : -window.innerHeight;
-      offset = Math.max(-window.innerHeight, Math.min(0, base - dy));
-      host.style.transition = "none";
-      host.style.transform = "translateY(" + offset + "px)";
+      const dy = dragStart - y;
+      const base = atHome ? 0 : -vh();
+      offset = Math.max(-vh(), Math.min(0, base - dy));
+      snapAnim?.stop();
+      host.style.transform = `translateY(${offset}px)`;
     };
     const onUp = () => {
       if (!dragging) return; dragging = false;
-      host.style.transition = "transform 0.35s cubic-bezier(0.23, 1, 0.32, 1)";
-      snapTo(Math.abs(offset + (atHome ? 0 : window.innerHeight)) < window.innerHeight * 0.3 ? atHome : !atHome);
+      const target = atHome ? 0 : -vh();
+      const dist = Math.abs(offset - target);
+      snapTo(dist > vh() * 0.20 ? !atHome : atHome);
     };
 
     host.addEventListener('touchstart', e => { if(inputFocused || isInteractive(e.target)) return; onDown(e.touches[0].clientY); }, { passive: true });
