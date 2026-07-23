@@ -111,7 +111,7 @@ export class Renderer {
     const onMove = (y: number) => {
       if (!dragging) return;
       const dy = dragStart - y; const base = atHome ? 0 : -host.clientHeight;
-      offset = Math.max(-host.clientHeight, Math.min(0, base + dy));
+      offset = Math.max(-host.clientHeight, Math.min(0, base - dy));
       host.style.transition = "none";
       host.style.transform = "translateY(" + offset + "px)";
     };
@@ -124,7 +124,7 @@ export class Renderer {
     host.addEventListener('touchstart', e => onDown(e.touches[0].clientY), { passive: true });
     host.addEventListener('touchmove', e => onMove(e.touches[0].clientY), { passive: true });
     host.addEventListener('touchend', () => onUp());
-    host.addEventListener('mousedown', e => { e.preventDefault(); onDown(e.clientY); });
+    host.addEventListener('mousedown', e => { if(isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
     window.addEventListener('mousemove', e => onMove(e.clientY));
     window.addEventListener('mouseup', () => onUp());
     host.addEventListener('wheel', e => {
