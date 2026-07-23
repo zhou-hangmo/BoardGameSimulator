@@ -28,8 +28,6 @@ export class Renderer {
   private top!: HTMLElement; private main!: HTMLElement; private hand!: HTMLElement;
   private btnPlay!: HTMLButtonElement; private btnPass!: HTMLButtonElement;
 
-  private scanInput: HTMLInputElement;
-
   constructor(el: HTMLElement) {
     this.el = el;
     const btn = document.createElement('div');
@@ -38,15 +36,6 @@ export class Renderer {
     btn.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);width:48px;height:48px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,.1);box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:99999;color:#333;';
     btn.addEventListener('click', () => this.showHomeLibrary());
     document.body.appendChild(btn);
-
-    // Persistent camera scan input (shared across all screens)
-    const si = document.createElement('input');
-    si.type = 'file';
-    si.accept = 'image/*';
-    (si as any).capture = 'environment';
-    si.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;';
-    this.scanInput = si;
-    document.body.appendChild(si);
   }
   init(cb: AppCallbacks) { this.cb = cb; this.showHomeLibrary(); }
 
@@ -75,21 +64,9 @@ export class Renderer {
     });
     document.getElementById('btn-load')?.addEventListener('pointerdown', () => loadInput?.click());
 
-    this.scanInput.onchange = async () => {
-      const f = this.scanInput.files?.[0]; if (!f) return;
-      this.showToast('识别中...');
-      try {
-        const { scanImage } = await import('../core/qrcode');
-        const sd = await scanImage(f);
-        if (sd?.sdp) {
-          this.scanInput.value = '';
-          await this.cb.onJoinRoom(JSON.stringify(sd));
-        } else {
-          this.showToast('未识别到二维码');
-        }
-      } catch { this.showToast('扫码失败，请手动输入'); }
-    };
-    document.getElementById('btn-scan-home')?.addEventListener('click', () => this.scanInput.click());
+    document.getElementById('btn-scan-home')?.addEventListener('click', () => this.startScanner((data) => {
+      this.cb.onJoinRoom(JSON.stringify(data));
+    }));
 
     const input = document.getElementById('code-input') as HTMLInputElement;
     const arrow = document.getElementById('arrow')!;
@@ -194,7 +171,6 @@ export class Renderer {
     this.addSwipeBack();
   }
 
-  // Left-edge swipe to go back
   private addSwipeBack(): void {
     let sx = 0; let sy = 0; let swiping = false;
     const EDGE = 32; const THRESHOLD = 80;
@@ -228,22 +204,9 @@ export class Renderer {
     document.getElementById('btn-start')?.addEventListener('pointerdown', (e: any) => { if((e.target as HTMLButtonElement).disabled) return; this.cb.onStartGame(); });
     document.getElementById('btn-share')?.addEventListener('pointerdown', () => this.cb.onShareRoom());
     document.getElementById('btn-scan-guest')?.addEventListener('click', () => {
-      this.scanInput.setAttribute('capture', 'environment');
-      this.scanInput.onchange = async () => {
-        const f = this.scanInput.files?.[0]; if (!f) return;
-        this.showToast('识别中...');
-        try {
-          const { scanImage } = await import('../core/qrcode');
-          const sd = await scanImage(f);
-          if (sd?.sdp) {
-            this.scanInput.value = '';
-            await this.cb.onScanGuestQr(JSON.stringify(sd));
-          } else {
-            this.showToast('未识别到访客二维码');
-          }
-        } catch { this.showToast('扫码失败'); }
-      };
-      this.scanInput.click();
+      this.startScanner((data) => {
+        this.cb.onScanGuestQr(JSON.stringify(data));
+      });
     });
   }
   showWaitRoom(code: string, ps: { name: string; isHost: boolean }[]): void {
@@ -289,6 +252,74 @@ export class Renderer {
     if(isCalling&&my){this.btnPlay.style.display='none';this.btnPass.style.display='none';document.getElementById('btn-call')?.addEventListener('pointerdown',()=>this.cb.onPlayAction('call_landlord',{call:true}));document.getElementById('btn-nocall')?.addEventListener('pointerdown',()=>this.cb.onPlayAction('call_landlord',{call:false}));}
     else{this.btnPlay.style.display='';this.btnPass.style.display='';this.btnPlay.disabled=!my||!isPlaying;this.btnPass.disabled=!my||!isPlaying;}
     document.getElementById('btn-back-game')?.addEventListener('click',()=>{this.cb.onLeaveRoom();this.showHomeLibrary();});
+  }
+
+  private scannerStream: MediaStream | null = null;
+
+  private async startScanner(onResult: (data: unknown) => void): Promise<void> {
+    // Create scanner overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;display:flex;flex-direction:column;';
+    const video = document.createElement('video');
+    video.style.cssText = 'flex:1;width:100%;object-fit:cover;';
+    video.setAttribute('playsinline', '');
+    video.setAttribute('autoplay', '');
+    overlay.appendChild(video);
+
+    const btnClose = document.createElement('button');
+    btnClose.textContent = '关闭';
+    btnClose.style.cssText = 'position:absolute;top:16px;right:16px;padding:8px 16px;border-radius:20px;border:none;background:rgba(0,0,0,.5);color:#fff;font-size:16px;z-index:1;cursor:pointer;';
+    overlay.appendChild(btnClose);
+
+    const hint = document.createElement('div');
+    hint.textContent = '将二维码对准取景框';
+    hint.style.cssText = 'position:absolute;bottom:40px;left:0;right:0;text-align:center;color:#fff;font-size:14px;opacity:.7;';
+    overlay.appendChild(hint);
+
+    document.body.appendChild(overlay);
+
+    const cleanup = () => {
+      this.scannerStream?.getTracks().forEach(t => t.stop());
+      this.scannerStream = null;
+      overlay.remove();
+    };
+
+    btnClose.onclick = cleanup;
+
+    try {
+      this.scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = this.scannerStream;
+      await video.play();
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+
+      const tick = async () => {
+        if (!this.scannerStream) return;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        try {
+          const barcodes = await detector.detect(canvas);
+          if (barcodes.length > 0) {
+            for (const b of barcodes) {
+              try {
+                const data = JSON.parse(b.rawValue);
+                cleanup();
+                onResult(data);
+                return;
+              } catch { /* not our QR */ }
+            }
+          }
+        } catch { /* detection error */ }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    } catch {
+      cleanup();
+      this.showToast('无法访问相机，请确认权限');
+    }
   }
 
   showToast(msg: string): void {
