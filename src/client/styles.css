@@ -12,7 +12,7 @@
 }
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;backdrop-filter:blur(0px);font-family:var(--font);font-size:17px;line-height:1.45;color:var(--label);background:var(--bg);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
-#app{background:var(--wallpaper,#dbeafe);width:100%;height:100%}
+#app{background:var(--wallpaper,#dbeafe);width:100%;height:100%;position:relative;overflow:hidden}
 
 /* === Merged scroll (home + library) === */
 .scroll-host,.drawer{width:100%;overflow:hidden;will-change:transform;contain:layout style;}
@@ -116,9 +116,9 @@ html,body{width:100%;height:100%;overflow:hidden;backdrop-filter:blur(0px);font-
 @media(prefers-reduced-motion:reduce){.card-hand,.btn{transition:none!important}.card-hand.sel{transform:none!important}.scroll-host{scroll-behavior:auto}}
 @media(prefers-reduced-transparency:reduce){.nav-bar,.game-top,.game-bar-bot{background:#fafafa;backdrop-filter:none;-webkit-backdrop-filter:none}}
 
-@media(min-width:401px){#app{width:400px;margin:0 auto;border-left:.33px solid var(--sep);border-right:.33px solid var(--sep)}.drawer,.drawer-mask{width:400px;left:50%;right:auto;margin-left:-200px}}
+@media(min-width:401px){#app{width:400px;margin:0 auto;border-left:.33px solid var(--sep);border-right:.33px solid var(--sep)}}
 
 .main-stage{transition:none;will-change:transform;border-radius:0;position:relative;z-index:1;}
-.drawer{position:fixed;bottom:0;left:0;right:0;z-index:3;background:rgba(255,255,255,0.08);border-radius:0;overflow:hidden;transform:translateY(100%);will-change:transform;max-height:100vh;}
-.drawer-mask{position:fixed;inset:0;z-index:2;background:#000;opacity:0;pointer-events:none;will-change:opacity;}
+.drawer{position:absolute;bottom:0;left:0;right:0;z-index:3;background:rgba(255,255,255,0.08);border-radius:0;overflow:hidden;transform:translateY(100%);will-change:transform;}
+.drawer-mask{position:absolute;inset:0;z-index:2;background:#000;opacity:0;pointer-events:none;will-change:opacity;}
 .drawer-scroll{overflow-y:auto;height:100vh;padding:0 16px 40px;}.drawer-import-pill{display:flex;align-items:center;justify-content:center;margin:16px 16px 12px;height:100px;border-radius:50px;background:rgba(255,255,255,0.12);backdrop-filter:blur(16px)saturate(1.5);-webkit-backdrop-filter:blur(16px)saturate(1.5);border:0.5px solid rgba(255,255,255,0.2);cursor:pointer;}.pill-plus{font-size:36px;color:rgba(255,255,255,0.6);font-weight:200;line-height:1;}
