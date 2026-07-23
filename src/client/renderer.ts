@@ -120,7 +120,7 @@ export class Renderer {
     };
 
     const dScroll = document.getElementById("drawer-scroll")!;
-    const canCloseDrawer = () => open && dScroll.scrollTop <= 2;
+    const canCloseDrawer = () => open && dScroll.scrollTop <= 10;
 
     const onTouchStart = (e: TouchEvent) => {
       if (inputFocused || isInteractive(e.target)) return;
