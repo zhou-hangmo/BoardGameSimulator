@@ -1,237 +1,134 @@
-// ============================================================
-// BoardGameSimulator — P2P 通信封装
-// ============================================================
-
+// P2P Manager — QR-based SDP exchange
 import type { GameAction, PlayerView, ErrorResponse } from './types';
+import { hostCreateOffer, hostAcceptAnswer, guestCreateAnswer, sendJson, type Connection } from './webrtc';
+import { encodeQR } from './qrcode';
 
-type MessageHandler = (fromPeerId: string, data: unknown) => void;
-type ConnectionHandler = (peerId: string) => void;
+type MsgCb = (fromPeerId: string, data: unknown) => void;
 
-interface RoomAPI {
-  createRoom(): Promise<{ roomCode: string }>;
-  joinRoom(code: string): Promise<void>;
-  onPeerJoin(callback: ConnectionHandler): void;
-  onPeerLeave(callback: ConnectionHandler): void;
-  onMessage(callback: MessageHandler): void;
-  sendTo(peerId: string, data: unknown): void;
-  broadcast(data: unknown): void;
-  leave(): void;
-}
-
-/**
- * P2P 通信管理器。
- * 封装 @moku-labs/room，提供房间创建/加入/消息发送。
- * 如果 @moku-labs/room 不可用，回退到模拟模式（单机调试）。
- */
 export class P2PManager {
-  private forceBC = false;
-  private room: RoomAPI | null = null;
-  private sigRoom: import('./signaling').SignalingRoom | null = null;
-  private initialized = false;
-  private peerIds: string[] = [];
-  private onActionCallback: ((action: GameAction) => void) | null = null;
-  private onMsgCallback: MessageHandler | null = null;
-  private onPlayerJoinCallback: ConnectionHandler | null = null;
-  private onPlayerLeaveCallback: ConnectionHandler | null = null;
+  private conns = new Map<string, Connection>(); // peerId → connection
+  private roomCode: string = '';
+  private hostOfferConn: Connection | null = null;
+  private qrOffer: string = '';
+  private qrAnswer: string = '';
+  private peerIdx = 0;
+  private onActionCb: ((action: GameAction) => void) | null = null;
+  private onMsgCb: MsgCb | null = null;
+  private onPeerJoinCb: ((id: string) => void) | null = null;
 
-  useBroadcastChannel(): void { this.forceBC = true; }
+  // ─── Host ───
 
-  async init(): Promise<void> {
-    if (this.initialized) return;
-    this.initialized = true;
-    if (this.forceBC) {
-      console.log("[P2P] 测试模式: BroadcastChannel");
-      this.room = this.createBCRoom();
-    } else {
-      try {
-        const { createSignalingRoom } = await import('./signaling');
-        const sig = createSignalingRoom('boardgame-simulator');
-        this.sigRoom = sig;
-        const { createWebRTCRoom } = await import('./webrtc');
-        const wrc = createWebRTCRoom(sig as any);
-        this.room = wrc as unknown as RoomAPI;
-        this.room.leave = () => { wrc.leave(); sig.leave(); };
-        console.log('[P2P] WebRTC + Nostr/QR');
-      } catch {
-        console.warn('[P2P] 回退 BroadcastChannel');
-        this.room = this.createBCRoom();
-      }
+  async createRoom(): Promise<{ roomCode: string; offerQr: string }> {
+    this.roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+    this.hostOfferConn = await hostCreateOffer(this.roomCode, (conn, data) => {
+      this.handleIncoming(conn.peerId, data);
+    });
+    this.qrOffer = JSON.stringify({
+      roomCode: this.roomCode,
+      sdp: JSON.stringify(this.hostOfferConn.pc.localDescription),
+    });
+    return { roomCode: this.roomCode, offerQr: this.qrOffer };
+  }
+
+  async acceptGuestAnswer(answerQrData: string): Promise<string> {
+    const data = JSON.parse(answerQrData) as { roomCode: string; sdp: string };
+    if (data.roomCode !== this.roomCode) throw new Error('房间码不匹配');
+    await hostAcceptAnswer(this.roomCode, data.sdp);
+    this.peerIdx++;
+    const pid = `player-${this.peerIdx}`;
+    // Store the host conn with the guest's peer id
+    this.conns.set(pid, this.hostOfferConn!);
+    this.onPeerJoinCb?.(pid);
+    // Re-create offer for next guest
+    this.hostOfferConn = await hostCreateOffer(this.roomCode, (conn, data) => {
+      this.handleIncoming(conn.peerId, data);
+    });
+    this.qrOffer = JSON.stringify({
+      roomCode: this.roomCode,
+      sdp: JSON.stringify(this.hostOfferConn.pc.localDescription),
+    });
+    return pid;
+  }
+
+  getQrOfferData(): string { return this.qrOffer; }
+
+  async getQrOfferImage(): Promise<string> {
+    return encodeQR({ roomCode: this.roomCode, sdp: this.qrOffer, peerId: 'host' });
+  }
+
+  // ─── Guest ───
+
+  async joinFromOffer(offerQrData: string): Promise<string> {
+    const data = JSON.parse(offerQrData) as { roomCode: string; sdp: string };
+    this.roomCode = data.roomCode;
+    const conn = await guestCreateAnswer(data.sdp, (c, d) => {
+      this.handleIncoming(c.peerId, d);
+    });
+    this.conns.set('host', conn);
+    this.qrAnswer = JSON.stringify({
+      roomCode: this.roomCode,
+      sdp: JSON.stringify(conn.pc.localDescription),
+    });
+    return this.qrAnswer;
+  }
+
+  getQrAnswerData(): string { return this.qrAnswer; }
+
+  async getQrAnswerImage(): Promise<string> {
+    return encodeQR({ roomCode: this.roomCode, sdp: this.qrAnswer, peerId: 'guest' });
+  }
+
+  // ─── Messaging ───
+
+  sendAction(action: GameAction) {
+    this.broadcastRaw('action', action);
+  }
+
+  sendPlayerView(peerId: string, view: PlayerView) {
+    this.sendRaw(peerId, 'state', view);
+  }
+
+  sendError(peerId: string, error: ErrorResponse) {
+    this.sendRaw(peerId, 'error', error);
+  }
+
+  sendRaw(peerId: string, type: string, payload: unknown) {
+    const conn = this.conns.get(peerId);
+    if (conn) sendJson(conn, { type, payload });
+  }
+
+  broadcastRaw(type: string, payload: unknown) {
+    for (const [, conn] of this.conns) {
+      sendJson(conn, { type, payload });
     }
-
-    this.room.onPeerJoin((peerId: string) => {
-      this.peerIds.push(peerId);
-      this.onPlayerJoinCallback?.(peerId);
-    });
-
-    this.room.onPeerLeave((peerId: string) => {
-      this.peerIds = this.peerIds.filter(id => id !== peerId);
-      this.onPlayerLeaveCallback?.(peerId);
-    });
-
-    this.room.onMessage((fromPeerId: string, data: unknown) => {
-      const msg = data as { type: string; payload: unknown };
-      // Filtered: only action messages
-      if (msg.type === 'action') {
-        this.onActionCallback?.(msg.payload as GameAction);
-      }
-      // Raw: all messages
-      this.onMsgCallback?.(fromPeerId, data);
-    });
   }
 
-  // ========== 房间管理 ==========
+  // ─── Events ───
 
-  async createRoom(): Promise<string> {
-    if (!this.room) await this.init();
-    const sigResult = await this.sigRoom!.createRoom();
-    const roomCode = sigResult.roomCode;
-    await (this.room!.createRoom as (code?: string) => Promise<{ roomCode: string }>)(roomCode);
-    return roomCode;
-  }
+  onAction(cb: (action: GameAction) => void) { this.onActionCb = cb; }
+  onMessage(cb: MsgCb) { this.onMsgCb = cb; }
+  onPlayerJoin(cb: (id: string) => void) { this.onPeerJoinCb = cb; }
 
-  async joinRoom(code: string): Promise<void> {
-    if (!this.room) await this.init();
-    await this.room!.joinRoom(code);
-  }
+  getPeerIds(): string[] { return Array.from(this.conns.keys()).filter(k => k !== 'host'); }
+  getPeerCount(): number { return this.peerIdx; }
+  getRoomCode(): string { return this.roomCode; }
 
   async shareRoom(): Promise<string> {
-    if (!this.room) await this.init();
-    return this.sigRoom?.shareRoom?.() ?? '';
+    return encodeQR({ roomCode: this.roomCode, sdp: this.qrOffer, peerId: 'host' });
   }
 
-  // ========== 消息发送 ==========
-
-  sendAction(action: GameAction): void {
-    this.room?.broadcast({ type: 'action', payload: action });
+  leave() {
+    for (const [, conn] of this.conns) conn.pc.close();
+    this.conns.clear();
+    this.peerIdx = 0;
+    this.qrOffer = '';
+    this.qrAnswer = '';
+    this.hostOfferConn = null;
   }
 
-  sendRaw(peerId: string, type: string, payload: unknown): void {
-    this.room?.sendTo(peerId, { type, payload });
-  }
-
-  broadcastRaw(type: string, payload: unknown): void {
-    this.room?.broadcast({ type, payload });
-  }
-
-  sendPlayerView(peerId: string, view: PlayerView): void {
-    this.room?.sendTo(peerId, { type: 'state', payload: view });
-  }
-
-  sendError(peerId: string, error: ErrorResponse): void {
-    this.room?.sendTo(peerId, { type: 'error', payload: error });
-  }
-
-  broadcastToAll(view: PlayerView): void {
-    this.room?.broadcast({ type: 'state', payload: view });
-  }
-
-  // ========== 事件回调 ==========
-
-  onAction(callback: (action: GameAction) => void): void {
-    this.onActionCallback = callback;
-  }
-
-  onMessage(callback: MessageHandler): void {
-    this.onMsgCallback = callback;
-  }
-
-  onPlayerJoin(callback: ConnectionHandler): void {
-    this.onPlayerJoinCallback = callback;
-  }
-
-  onPlayerLeave(callback: ConnectionHandler): void {
-    this.onPlayerLeaveCallback = callback;
-  }
-
-  getPeerCount(): number {
-    return this.peerIds.length;
-  }
-
-  getPeerIds(): string[] {
-    return [...this.peerIds];
-  }
-
-  isNostrConnected(): boolean {
-    return this.sigRoom?.isNostrConnected?.() ?? false;
-  }
-
-  getNostrStatus(): { connected: number; total: number } {
-    return this.sigRoom?.getNostrStatus?.() ?? { connected: 0, total: 0 };
-  }
-
-  leave(): void {
-    this.room?.leave();
-    this.initialized = false;
-  }
-
-  // ========== BroadcastChannel 模式（多标签本地联机） ==========
-
-  private createBCRoom(): RoomAPI {
-    const peerJoins: ConnectionHandler[] = [];
-    const peerLeaves: ConnectionHandler[] = [];
-    const msgHandlers: MessageHandler[] = [];
-    let bc: BroadcastChannel | null = null;
-    let myId = '';
-    let roomCode = '';
-
-    const sendBC = (data: unknown) => {
-      if (bc) bc.postMessage(data);
-    };
-
-    return {
-      async createRoom() {
-        roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
-        myId = `host-${roomCode}`;
-        bc = new BroadcastChannel(`bgs-${roomCode}`);
-        bc.onmessage = (ev: MessageEvent) => {
-          const m = ev.data as { type: string; from: string; to?: string; payload?: unknown };
-          if (m.type === 'join') {
-            peerJoins.forEach(cb => cb(m.from));
-            // Reply with welcome so joiner knows host's ID
-            sendBC({ type: 'welcome', from: myId, to: m.from });
-          } else if (m.type === 'leave') {
-            peerLeaves.forEach(cb => cb(m.from));
-          } else if (m.type === 'msg') {
-            if (!m.to || m.to === myId) msgHandlers.forEach(cb => cb(m.from, m.payload));
-          }
-        };
-        console.log(`[BC] 房间创建: ${roomCode}`);
-        return { roomCode };
-      },
-
-      async joinRoom(code: string) {
-        roomCode = code;
-        myId = `peer-${Date.now().toString(36)}`;
-        bc = new BroadcastChannel(`bgs-${code}`);
-        bc.onmessage = (ev: MessageEvent) => {
-          const m = ev.data as { type: string; from: string; to?: string; payload?: unknown };
-          if (m.type === 'welcome' && m.to === myId) {
-            peerJoins.forEach(cb => cb(m.from));
-          } else if (m.type === 'msg') {
-            if (!m.to || m.to === myId) msgHandlers.forEach(cb => cb(m.from, m.payload));
-          } else if (m.type === 'leave') {
-            peerLeaves.forEach(cb => cb(m.from));
-          }
-        };
-        sendBC({ type: 'join', from: myId });
-        console.log(`[BC] 加入房间: ${code}`);
-      },
-
-      onPeerJoin(cb: ConnectionHandler) { peerJoins.push(cb); },
-      onPeerLeave(cb: ConnectionHandler) { peerLeaves.push(cb); },
-      onMessage(cb: MessageHandler) { msgHandlers.push(cb); },
-
-      sendTo(peerId: string, data: unknown) {
-        sendBC({ type: 'msg', from: myId, to: peerId, payload: data });
-      },
-      broadcast(data: unknown) {
-        sendBC({ type: 'msg', from: myId, payload: data });
-      },
-      leave() {
-        sendBC({ type: 'leave', from: myId });
-        bc?.close();
-        bc = null;
-      },
-    };
+  private handleIncoming(peerId: string, data: unknown) {
+    const msg = data as { type: string; payload: unknown };
+    if (msg.type === 'action') this.onActionCb?.(msg.payload as GameAction);
+    this.onMsgCb?.(peerId, msg);
   }
 }

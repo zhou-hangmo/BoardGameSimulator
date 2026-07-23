@@ -1,23 +1,18 @@
 // ============================================================
-// BoardGameSimulator — Client MVP
+// BoardGameSimulator — Client MVP (QR dual-scan P2P)
 // ============================================================
 import { GameEngine } from '../core/engine';
 import { P2PManager } from '../core/p2p';
 import { Renderer, type GameMeta } from './renderer';
 import type { GameState, GameAction, GameConfig, PlayerView } from '../core/types';
 import doudizhuConfig from '../games/doudizhu/config.json';
-import { StateBackup } from '../core/backup';
-import { HostMigration } from '../core/migration';
 
 const renderer = new Renderer(document.getElementById('app')!);
 const p2p = new P2PManager();
-const backup = new StateBackup();
-const migration = new HostMigration(backup);
 let engine: GameEngine | null = null;
 let myIdx = 0;
 let isHost = false;
 let room = '';
-const DEV_MODE = false;
 
 const installedGames: GameMeta[] = [{
   id: 'doudizhu', name: '斗地主', description: '经典三人扑克',
@@ -25,17 +20,14 @@ const installedGames: GameMeta[] = [{
   config: doudizhuConfig as GameConfig
 }];
 
-// ── Host: broadcast game state to all peers ──
 function broadcastGame() {
   if (!engine || !isHost) return;
   const state = engine.getState();
-  // Backup to all peers
-  backup.broadcast(p2p.getPeerIds(), state);
-  // Send player views
   for (let i = 0; i < state.players.length; i++) {
     const v = engine.buildPlayerView(i);
-    if (i === 0) renderer.showGame(v);
-    else {
+    if (i === 0) {
+      renderer.showGame(v);
+    } else {
       const pid = p2p.getPeerIds()[i - 1];
       if (pid) p2p.sendPlayerView(pid, v);
     }
@@ -58,21 +50,16 @@ renderer.init({
     input.click();
   },
 
-  // ── HOST: Create Room ──
+  // ── HOST: Create Room → QR with SDP offer ──
   onCreateRoom: async (gameId: string) => {
     const g = installedGames.find(x => x.id === gameId);
-    if (!g?.config || !(g.config as GameConfig).meta) { renderer.showToast('配置加载中，请稍后'); return ''; }
-    await p2p.init();
-    backup.setTransport((pid, data) => p2p.sendRaw(pid, (data as any).type, (data as any).payload)); // IS-008
-    room = await p2p.createRoom();
+    if (!g?.config) { renderer.showToast('配置加载中'); return ''; }
     isHost = true; myIdx = 0;
-    migration.setup({
-      myPeerId: 'host', isHost: true, peers: [],
-      broadcast: (d) => p2p.broadcastToAll(d as any),
-      sendTo: (pid, d) => p2p.sendRaw(pid, (d as any).type, (d as any).payload),
-      onBecomeHost: (state) => { engine?.loadState(state); broadcastGame(); },
-      election: (peers) => peers[0],
-    });
+
+    const { roomCode } = await p2p.createRoom();
+    room = roomCode;
+
+    // Init engine
     const s0: GameState = { version: 0, players: [], deck: [], discard: [], bottomCards: [], landlordIndex: -1, currentTurn: 0, phase: 'idle', lastPlay: null, passCount: 0, winner: null };
     engine = new GameEngine(s0);
     const errs = engine.loadGame(g.config as GameConfig);
@@ -82,9 +69,13 @@ renderer.init({
       return '';
     }
 
-    // Host receives actions from peers
+    const players: { name: string; isHost: boolean }[] = [{ name: '你', isHost: true }];
+    const qrImg = await p2p.getQrOfferImage();
+    renderer.showLobby(room, players, qrImg);
+
+    // Host handles actions from connected guests
     p2p.onAction(async (action: GameAction) => {
-      if (!engine || !isHost) return;
+      if (!engine) return;
       const err = await engine.dispatch(action);
       if (err) {
         const pid = p2p.getPeerIds()[action.playerIndex - 1];
@@ -94,27 +85,11 @@ renderer.init({
       broadcastGame();
     });
 
-    // Player tracking
-    const players: { name: string; isHost: boolean }[] = [{ name: '你', isHost: true }];
-    if (DEV_MODE) {
-      players.push({ name: '玩家 2', isHost: false }, { name: '玩家 3', isHost: false });
-    }
-    const nostrStatus = p2p.getNostrStatus();
-    const qrUrl = await p2p.shareRoom();
-    renderer.showLobby(room, players, qrUrl, nostrStatus);
-
+    // Host scans guest's QR to complete handshake
     p2p.onPlayerJoin((peerId: string) => {
       const idx = p2p.getPeerIds().indexOf(peerId) + 1;
       players.push({ name: `玩家 ${idx}`, isHost: false });
-      renderer.showLobby(room, players, qrUrl, nostrStatus);
-      p2p.sendRaw(peerId, 'assign', { playerIndex: idx });
-      p2p.broadcastRaw('lobby', { players });
-    });
-
-    p2p.onPlayerLeave((peerId: string) => {
-      const idx = p2p.getPeerIds().indexOf(peerId);
-      if (idx >= 0) { players.splice(idx + 1, 1); renderer.showLobby(room, players, qrUrl, nostrStatus); }
-      p2p.broadcastRaw('lobby', { players });
+      renderer.showLobby(room, players, qrImg);
     });
 
     return room;
@@ -127,34 +102,41 @@ renderer.init({
     broadcastGame();
   },
 
-  // ── JOINER: Join Room ──
-  onJoinRoom: async (code: string) => {
-    await p2p.init();
-    isHost = false; room = code;
-    renderer.showWaitRoom(code, [{ name: '主持人', isHost: true }, { name: '你', isHost: false }]);
+  // ── GUEST: Scan host QR → create answer QR ──
+  onJoinRoom: async (qrData: string) => {
+    isHost = false; myIdx = 0;
+    try {
+      await p2p.joinFromOffer(qrData);
+      room = p2p.getRoomCode();
+      const answerImg = await p2p.getQrAnswerImage();
+      renderer.showGuestQr(room, answerImg);
 
-    // Joiner listens for state updates from host
-    
-    p2p.onMessage((_peerId, data) => {
-      const d = data as { type: string; payload: unknown };
-      if (d.type === 'assign') {
-        myIdx = (d.payload as { playerIndex: number }).playerIndex;
-        renderer.showToast(`你已加入 - 位置 ${myIdx}`);
-      } else if (d.type === 'lobby') {
-        const plist = (d.payload as { players: { name: string; isHost: boolean }[] }).players;
-        if (plist) renderer.showWaitRoom(code, plist);
-      } else if (d.type === 'state') {
-        renderer.showGame(d.payload as PlayerView);
-      } else if (d.type === 'error') {
-        renderer.showToast(`无效操作`);
-      }
-    });
+      // Guest listens for state updates
+      p2p.onMessage((_peerId, data) => {
+        const d = data as { type: string; payload: unknown };
+        if (d.type === 'state') {
+          const view = d.payload as PlayerView;
+          myIdx = view.playerIndex;
+          renderer.showGame(view);
+        } else if (d.type === 'error') {
+          renderer.showToast('无效操作');
+        }
+      });
 
-    await p2p.joinRoom(code);
-    renderer.showToast('已连接，等待主持人开局');
+    } catch {
+      renderer.showToast('加入失败，请检查二维码');
+    }
   },
 
-  // ── ANY PLAYER: Action ──
+  // ── HOST: Scan guest's answer QR ──
+  onScanGuestQr: async (qrData: string) => {
+    try {
+      await p2p.acceptGuestAnswer(qrData);
+      renderer.showToast('玩家已连接');
+    } catch { renderer.showToast('连接失败'); }
+  },
+
+  // ── ANY: Action ──
   onPlayAction: (type: string, payload: unknown) => {
     if (isHost) {
       engine?.dispatch({ type, playerIndex: myIdx, payload, timestamp: Date.now() }).then(() => broadcastGame());
@@ -170,19 +152,19 @@ renderer.init({
   },
 
   onSaveGame: async () => {
-    if (!engine) return "";
-    const { encodeQR } = await import("../core/qrcode");
-    return encodeQR({ roomCode: "save", peerId: "save", sdp: JSON.stringify(engine.getState()) });
+    if (!engine) return '';
+    const { encodeQR } = await import('../core/qrcode');
+    return encodeQR({ roomCode: 'save', sdp: JSON.stringify(engine.getState()), peerId: 'save' });
   },
   onLoadGame: (data: string) => {
     try {
       const state = JSON.parse(data);
-      if (!state.players) { renderer.showToast("无效存档"); return; }
+      if (!state.players) { renderer.showToast('无效存档'); return; }
       engine = new GameEngine(state);
       isHost = true; myIdx = 0;
       renderer.showGame(engine.buildPlayerView(0));
-      renderer.showToast("棋局已恢复");
-    } catch { renderer.showToast("存档损坏"); }
+      renderer.showToast('棋局已恢复');
+    } catch { renderer.showToast('存档损坏'); }
   },
-  onLeaveRoom: () => { p2p.leave(); engine?.destroy(); engine = null; isHost = false; myIdx = 0; room = ''; backup.clear(); },
+  onLeaveRoom: () => { p2p.leave(); engine?.destroy(); engine = null; isHost = false; myIdx = 0; room = ''; },
 });

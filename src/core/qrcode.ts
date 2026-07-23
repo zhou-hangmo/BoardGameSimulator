@@ -3,10 +3,10 @@ import QRCode from 'qrcode';
 
 export interface SignalingData {
   roomCode: string;
-  sdp?: string;
+  sdp: string;    // JSON-serialized RTCSessionDescription
+  peerId: string;
   ipv6?: string;
   lanIp?: string;
-  peerId: string;
 }
 
 /** Encode signaling data to QR code data URL */
