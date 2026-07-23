@@ -1,67 +1,60 @@
 // P2P Manager — QR-based SDP exchange
 import type { GameAction, PlayerView, ErrorResponse } from './types';
-import { hostCreateOffer, hostAcceptAnswer, guestCreateAnswer, compressSdp, sendJson, type Connection } from './webrtc';
-import { encodeQR, type SignalingData } from './qrcode';
+import { hostCreateOffer, hostAcceptAnswer, guestCreateAnswer, extractFields, sendJson, type Connection, type SdpFields } from './webrtc';
+import { encodeQR } from './qrcode';
 
 type MsgCb = (fromPeerId: string, data: unknown) => void;
 
 export class P2PManager {
   private conns = new Map<string, Connection>();
   private roomCode: string = '';
-  private hostOfferSdp: string = '';
-  private guestAnswerSdp: string = '';
+  private hostFields: SdpFields | null = null;
+  private guestFields: SdpFields | null = null;
   private peerIdx = 0;
   private onActionCb: ((action: GameAction) => void) | null = null;
   private onMsgCb: MsgCb | null = null;
   private onPeerJoinCb: ((id: string) => void) | null = null;
 
-  // ─── Host ───
-
   async createRoom(): Promise<string> {
     this.roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
     const conn = await hostCreateOffer(this.roomCode, (_c, data) => this.handleIncoming('guest', data));
     this.conns.set('_pending', conn);
-    this.hostOfferSdp = compressSdp(conn.pc.localDescription!.sdp!);
+    this.hostFields = extractFields(conn.pc.localDescription!.sdp!);
     return this.roomCode;
   }
 
-  async acceptGuestAnswer(answerQrData: string): Promise<string> {
-    const data = JSON.parse(answerQrData) as SignalingData;
-    if (data.roomCode !== this.roomCode) throw new Error('房间码不匹配');
-    await hostAcceptAnswer(this.roomCode, data.sdp!);
+  async acceptGuestAnswer(answerQrJson: string): Promise<string> {
+    const flat = JSON.parse(answerQrJson);
+    if (flat.rc !== this.roomCode) throw new Error('房间码不匹配');
+    await hostAcceptAnswer(this.roomCode, flat);
     this.peerIdx++;
     const pid = `player-${this.peerIdx}`;
     const conn = this.conns.get('_pending');
     if (conn) this.conns.set(pid, conn);
     this.conns.delete('_pending');
     this.onPeerJoinCb?.(pid);
-    // Pre-create next offer for multi-guest
     const next = await hostCreateOffer(this.roomCode, (_c, d) => this.handleIncoming('guest', d));
     this.conns.set('_pending', next);
-    this.hostOfferSdp = compressSdp(next.pc.localDescription!.sdp!);
+    this.hostFields = extractFields(next.pc.localDescription!.sdp!);
     return pid;
   }
 
   async getHostQrImage(): Promise<string> {
-    return encodeQR({ type: 'offer', roomCode: this.roomCode, sdp: this.hostOfferSdp, peerId: 'host' });
+    return encodeQR({ t: 'offer', rc: this.roomCode, ...this.hostFields } as any);
   }
 
-  // ─── Guest ───
-
-  async joinFromOffer(offerQrData: string): Promise<string> {
-    const sig = JSON.parse(offerQrData) as SignalingData;
-    this.roomCode = sig.roomCode;
-    const conn = await guestCreateAnswer(sig.sdp!, (_c, d) => this.handleIncoming('host', d));
+  async joinFromOffer(offerQrJson: string): Promise<string> {
+    const flat = JSON.parse(offerQrJson);
+    this.roomCode = flat.rc;
+    const conn = await guestCreateAnswer(flat, (_c, d) => this.handleIncoming('host', d));
     this.conns.set('host', conn);
-    this.guestAnswerSdp = compressSdp(conn.pc.localDescription!.sdp!);
+    this.guestFields = extractFields(conn.pc.localDescription!.sdp!);
     return this.roomCode;
   }
 
   async getGuestQrImage(): Promise<string> {
-    return encodeQR({ type: 'answer', roomCode: this.roomCode, sdp: this.guestAnswerSdp, peerId: 'guest' });
+    return encodeQR({ t: 'answer', rc: this.roomCode, ...this.guestFields } as any);
   }
-
-  // ─── Messaging ───
 
   sendAction(action: GameAction) { this.broadcastRaw('action', action); }
   sendPlayerView(peerId: string, view: PlayerView) { this.sendRaw(peerId, 'state', view); }
@@ -84,15 +77,15 @@ export class P2PManager {
   getRoomCode(): string { return this.roomCode; }
 
   async shareRoom(): Promise<string> {
-    return encodeQR({ type: 'offer', roomCode: this.roomCode, sdp: this.hostOfferSdp, peerId: 'host' });
+    return encodeQR({ t: 'offer', rc: this.roomCode, ...this.hostFields } as any);
   }
 
   leave() {
     for (const [, conn] of this.conns) conn.pc.close();
     this.conns.clear();
     this.peerIdx = 0;
-    this.hostOfferSdp = '';
-    this.guestAnswerSdp = '';
+    this.hostFields = null;
+    this.guestFields = null;
   }
 
   private handleIncoming(peerId: string, data: unknown) {

@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite --host",
     "build": "tsc && vite build",
+    "ship": "npm run build && git add -A && git commit -m \"ship\" && git push",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
