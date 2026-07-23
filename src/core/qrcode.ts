@@ -15,7 +15,25 @@ export async function encodeQR(data: SignalingData): Promise<string> {
   return QRCode.toDataURL(json, { width: 400, margin: 2, errorCorrectionLevel: 'L' });
 }
 
-/** Decode signaling data from QR string (from scanner or URL param) */
+/** Decode QR from image file using BarcodeDetector API */
+export async function scanImage(file: File): Promise<SignalingData | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const barcodes = await detector.detect(bitmap);
+    bitmap.close();
+    if (barcodes.length > 0) {
+      return JSON.parse(barcodes[0].rawValue) as SignalingData;
+    }
+    return null;
+  } catch {
+    // BarcodeDetector not supported, try text fallback
+    try {
+      const text = await file.text();
+      return decodeQR(text);
+    } catch { return null; }
+  }
+}
 export function decodeQR(text: string): SignalingData | null {
   try {
     return JSON.parse(text) as SignalingData;

@@ -44,7 +44,7 @@ export class Renderer {
   showHomeLibrary(): void {
     this.gameBuilt = false;
     const games = this.cb.installedGames;
-    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer-mask" id="drawer-mask"></div><div class="drawer" id="drawer"><div class="drawer-scroll" id="drawer-scroll"><div class="drawer-import-pill" id="cell-import"><span class="pill-plus">+</span></div>${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div style="height:60px;"></div></div></div>`;
+    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><input type="file" id="scan-input" accept="image/*" capture="environment" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:56px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><button id="btn-scan-home" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📷</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer-mask" id="drawer-mask"></div><div class="drawer" id="drawer"><div class="drawer-scroll" id="drawer-scroll"><div class="drawer-import-pill" id="cell-import"><span class="pill-plus">+</span></div>${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div style="height:60px;"></div></div></div>`;
 
     const stage = document.getElementById('main-stage')!;
     const drawer = document.getElementById('drawer')!;
@@ -63,6 +63,23 @@ export class Renderer {
         this.showToast('无法识别'); } catch { this.showToast('文件无效'); }
     });
     document.getElementById('btn-load')?.addEventListener('pointerdown', () => loadInput?.click());
+
+    const scanInput = document.getElementById('scan-input') as HTMLInputElement;
+    scanInput?.addEventListener('change', async () => {
+      const f = scanInput.files?.[0]; if (!f) return;
+      this.showToast('识别中...');
+      try {
+        const { scanImage } = await import('../core/qrcode');
+        const sd = await scanImage(f);
+        if (sd?.roomCode) {
+          scanInput.value = '';
+          await this.cb.onJoinRoom(sd.roomCode);
+        } else {
+          this.showToast('未识别到二维码');
+        }
+      } catch { this.showToast('扫码失败，请手动输入'); }
+    });
+    document.getElementById('btn-scan-home')?.addEventListener('pointerdown', () => scanInput?.click());
 
     const input = document.getElementById('code-input') as HTMLInputElement;
     const arrow = document.getElementById('arrow')!;
@@ -195,33 +212,15 @@ export class Renderer {
     this.renderSecondary(g.name, `<div class="sec-body"><div class="section-hdr">游戏详情</div><div class="cell"><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div><button id="btn-create" class="btn btn-primary btn-block" style="margin-top:16px;">创建房间</button></div>`);
     document.getElementById('btn-create')?.addEventListener('pointerdown', () => this.cb.onCreateRoom(g.id));
   }
-  showLobby(code: string, ps: { name: string; isHost: boolean }[], nostrOk: boolean = true, qrUrl: string = ''): void {
-    const qrHtml = !nostrOk && qrUrl ? `<div style="text-align:center;padding:16px 0;"><img src="${qrUrl}" style="width:200px;height:200px;" /><div style="color:var(--label3);font-size:13px;margin-top:4px;">Nostr 不可用，请扫码加入</div></div>` : '';
+  showLobby(code: string, ps: { name: string; isHost: boolean }[], qrUrl: string = '', nostrStatus?: { connected: number; total: number }): void {
+    const statusText = nostrStatus ? `Nostr relay: ${nostrStatus.connected}/${nostrStatus.total} 通` : '';
+    const qrHtml = qrUrl ? `<div style="text-align:center;padding:16px 0;"><img src="${qrUrl}" style="width:200px;height:200px;border-radius:12px;" /><div style="color:var(--label3);font-size:13px;margin-top:4px;">扫码加入房间${statusText ? ' · ' + statusText : ''}</div></div>` : '';
     this.renderSecondary('房间大厅', `<div class="sec-body"><div class="room-code"><div class="code">${code}</div><div style="color:var(--label2);margin-top:4px;">分享给好友</div></div>${qrHtml}<div class="section-hdr">玩家 (${ps.length})</div>${ps.map(p=>`<div class="player-row"><span class="dot g"></span>${p.name}${p.isHost?' (主持人)':''}</div>`).join('')}<button id="btn-start" class="btn btn-primary btn-block" style="margin-top:16px;" ${ps.length<2?'disabled':''}>开始游戏</button><button id="btn-share" class="btn btn-secondary btn-block" style="margin-top:8px;">📤 分享房间</button></div>`);
     document.getElementById('btn-start')?.addEventListener('pointerdown', (e: any) => { if((e.target as HTMLButtonElement).disabled) return; this.cb.onStartGame(); });
     document.getElementById('btn-share')?.addEventListener('pointerdown', () => this.cb.onShareRoom());
   }
   showWaitRoom(code: string, ps: { name: string; isHost: boolean }[]): void {
-    this.renderSecondary('等待开局', `<div class="sec-body"><div class="room-code"><div class="code">${code}</div></div><div class="section-hdr">已加入玩家</div>${ps.map(p=>`<div class="player-row"><span class="dot g"></span>${p.name}${p.isHost?' (主持人)':''}</div>`).join('')}<div style="text-align:center;padding:32px;color:var(--label3);">等待主持人开局...</div><button id="btn-scan" class="btn btn-secondary btn-block" style="margin-top:8px;">📷 扫码加入</button></div>`);
-    document.getElementById('btn-scan')?.addEventListener('pointerdown', async () => {
-      const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
-      input.onchange = async () => {
-        const f = input.files?.[0]; if (!f) return;
-        this.showToast('识别中...');
-        try {
-          const text = await f.text();
-          const { decodeQR } = await import('../core/qrcode');
-          const sd = decodeQR(text);
-          if (sd?.roomCode) {
-            input.value = '';
-            await this.cb.onJoinRoom(sd.roomCode);
-          } else {
-            this.showToast('无法识别二维码');
-          }
-        } catch { this.showToast('文件无效'); }
-      };
-      input.click();
-    });
+    this.renderSecondary('等待开局', `<div class="sec-body"><div class="room-code"><div class="code">${code}</div></div><div class="section-hdr">已加入玩家</div>${ps.map(p=>`<div class="player-row"><span class="dot g"></span>${p.name}${p.isHost?' (主持人)':''}</div>`).join('')}<div style="text-align:center;padding:32px;color:var(--label3);">等待主持人开局...</div></div>`);
   }
 
   // ========== GAME SCREEN ==========

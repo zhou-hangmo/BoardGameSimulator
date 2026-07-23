@@ -23,8 +23,10 @@ export type NostrAPI = RoomAPI;
 const RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
-  'wss://relay.nostr.band',
-  'wss://relay.primal.net',
+  'wss://relay.house',
+  'wss://nostr.bitcoiner.social',
+  'wss://relay.snort.social',
+  'wss://nostr.v0l.io',
 ];
 
 function tagCode(roomCode: string): string {

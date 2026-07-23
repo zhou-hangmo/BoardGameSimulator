@@ -99,22 +99,21 @@ renderer.init({
     if (DEV_MODE) {
       players.push({ name: '玩家 2', isHost: false }, { name: '玩家 3', isHost: false });
     }
-    const nostrOk = p2p.isNostrConnected();
-    let qrUrl = '';
-    if (!nostrOk) qrUrl = await p2p.shareRoom();
-    renderer.showLobby(room, players, nostrOk, qrUrl);
+    const nostrStatus = p2p.getNostrStatus();
+    const qrUrl = await p2p.shareRoom();
+    renderer.showLobby(room, players, qrUrl, nostrStatus);
 
     p2p.onPlayerJoin((peerId: string) => {
       const idx = p2p.getPeerIds().indexOf(peerId) + 1;
       players.push({ name: `玩家 ${idx}`, isHost: false });
-      renderer.showLobby(room, players, nostrOk, qrUrl);
+      renderer.showLobby(room, players, qrUrl, nostrStatus);
       p2p.sendRaw(peerId, 'assign', { playerIndex: idx });
       p2p.broadcastRaw('lobby', { players });
     });
 
     p2p.onPlayerLeave((peerId: string) => {
       const idx = p2p.getPeerIds().indexOf(peerId);
-      if (idx >= 0) { players.splice(idx + 1, 1); renderer.showLobby(room, players); }
+      if (idx >= 0) { players.splice(idx + 1, 1); renderer.showLobby(room, players, qrUrl, nostrStatus); }
       p2p.broadcastRaw('lobby', { players });
     });
 
