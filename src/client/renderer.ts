@@ -66,9 +66,6 @@ export class Renderer {
 
     const input = document.getElementById('code-input') as HTMLInputElement;
     const arrow = document.getElementById('arrow')!;
-    let inputFocused = false;
-    input.addEventListener('focus', () => { inputFocused = true; });
-    input.addEventListener('blur', () => { inputFocused = false; });
     input.addEventListener('input', () => {
       const v = input.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase(); input.value = v;
       v.length === 6 ? arrow.classList.add('on') : arrow.classList.remove('on');
@@ -78,7 +75,7 @@ export class Renderer {
       try { await this.cb.onJoinRoom(input.value); } catch { this.showToast('加入失败'); }
     });
 
-    let open = false; let dragging = false; let dragStart = 0; let progress = 0;
+    let open = false; let dragging = false; let dragStart = 0; let progress = 0; let moved = false;
     const tr = 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)';
 
     const isInteractive = (el: any): boolean => {
@@ -109,24 +106,28 @@ export class Renderer {
     apply(0);
 
     const onDown = (y: number) => {
-      dragging = true; dragStart = y;
+      dragging = true; moved = false; dragStart = y;
       animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
     };
     const onMove = (y: number) => {
       if (!dragging) return;
       const dy = dragStart - y;
+      if (Math.abs(dy) > 5) moved = true;
       apply(open ? 1 + dy / vh() : dy / vh());
     };
     const onUp = () => {
       if (!dragging) return; dragging = false;
+      if (!moved) return;
       snap(open ? progress >= 0.80 : progress > 0.20);
     };
 
     const dScroll = document.getElementById("drawer-scroll")!;
     const canCloseDrawer = () => open && dScroll.scrollTop <= 10;
 
+    const hasKeyboard = () => document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
+
     const onTouchStart = (e: TouchEvent) => {
-      if (inputFocused || isInteractive(e.target)) return;
+      if (hasKeyboard() || isInteractive(e.target)) return;
       if (open && !canCloseDrawer()) return;
       onDown(e.touches[0].clientY);
     };
@@ -145,7 +146,7 @@ export class Renderer {
     window.addEventListener('mouseup', () => onUp());
     // Wheel
     document.addEventListener('wheel', (e: WheelEvent) => {
-      if (inputFocused) return;
+      if (hasKeyboard()) return;
       e.preventDefault();
       if (e.deltaY > 0 && !open) snap(true);
       else if (e.deltaY < 0 && open) snap(false);
