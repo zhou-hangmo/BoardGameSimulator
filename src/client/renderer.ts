@@ -69,7 +69,11 @@ export class Renderer {
     document.getElementById('commit-count')!.textContent = '#' + __COMMIT__;
 
     document.getElementById('btn-scan-home')?.addEventListener('click', () => this.startScanner((data, done) => {
-      this.cb.onJoinRoom(JSON.stringify(data)).then(done);
+      this.cb.onJoinRoom(JSON.stringify(data)).then(() => {
+        done();
+      }).catch((e: Error) => {
+        this.showToast('加入失败: ' + (e.message || ''));
+      });
     }));
 
     const input = document.getElementById('code-input') as HTMLInputElement;
@@ -209,7 +213,11 @@ export class Renderer {
     document.getElementById('btn-share')?.addEventListener('pointerdown', () => this.cb.onShareRoom());
     document.getElementById('btn-scan-guest')?.addEventListener('click', () => {
       this.startScanner((data, done) => {
-        this.cb.onScanGuestQr(JSON.stringify(data)).then(done);
+        this.cb.onScanGuestQr(JSON.stringify(data)).then(() => {
+          done();
+        }).catch((e: Error) => {
+          this.showToast('连接失败: ' + (e.message || ''));
+        });
       });
     });
   }
