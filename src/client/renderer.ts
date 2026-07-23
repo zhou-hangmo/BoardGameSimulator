@@ -105,11 +105,14 @@ export class Renderer {
     };
     apply(0);
 
-    const onDown = (y: number) => { dragging = true; dragStart = y; };
+    const onDown = (y: number) => {
+      dragging = true; dragStart = y;
+      animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
+    };
     const onMove = (y: number) => {
       if (!dragging) return;
       const dy = dragStart - y;
-      apply(open ? 1 - dy / vh() : dy / vh());
+      apply(open ? 1 + dy / vh() : dy / vh());
     };
     const onUp = () => {
       if (!dragging) return; dragging = false;
@@ -121,6 +124,12 @@ export class Renderer {
     stage.addEventListener('touchstart', onTouchStart, { passive: true });
     window.addEventListener('touchmove', (e: TouchEvent) => onMove(e.touches[0].clientY), { passive: true });
     window.addEventListener('touchend', () => onUp());
+    // Mouse drag
+    drawer.addEventListener('mousedown', (e: MouseEvent) => { if (isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
+    stage.addEventListener('mousedown', (e: MouseEvent) => { if (isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
+    window.addEventListener('mousemove', (e: MouseEvent) => onMove(e.clientY));
+    window.addEventListener('mouseup', () => onUp());
+    // Wheel
     document.addEventListener('wheel', (e: WheelEvent) => {
       if (inputFocused) return;
       e.preventDefault();
