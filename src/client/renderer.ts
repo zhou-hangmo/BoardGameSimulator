@@ -44,7 +44,7 @@ export class Renderer {
   showHomeLibrary(): void {
     this.gameBuilt = false;
     const games = this.cb.installedGames;
-    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer-backdrop" id="drawer-backdrop"></div><div class="drawer" id="drawer"><div class="nav-bar"><span class="nav-title">游戏库</span></div><div class="drawer-scroll">${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div class="cell" id="cell-import"><div class="cell-icon import">+</div><div class="cell-body"><div class="cell-title">导入 game.json</div></div></div><div style="height:60px;"></div></div></div>`;
+    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer" id="drawer"><div class="drawer-scroll">${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div class="cell" id="cell-import"><div class="cell-icon import">+</div><div class="cell-body"><div class="cell-title">导入 game.json</div></div></div><div style="height:60px;"></div></div></div>`;
 
     const stage = document.getElementById('main-stage')!;
     const drawer = document.getElementById('drawer')!;
@@ -90,7 +90,10 @@ export class Renderer {
       drawer.style.transition = anim ? tr : 'none';
       stage.style.transition = anim ? tr : 'none';
       backdrop.style.transition = anim ? 'opacity 0.35s linear' : 'none';
-      drawer.style.transform = `translateY(${(1 - progress) * 100}%)`;
+      const bp = Math.round(progress * 32); const sat = (1 + progress * 0.8).toFixed(2);
+      drawer.style.backdropFilter = anim ? 'blur(32px) saturate(1.8)' : 'blur(' + bp + 'px) saturate(' + sat + ')';
+      (drawer.style as any).webkitBackdropFilter = drawer.style.backdropFilter;
+      drawer.style.transform = 'translateY(' + ((1 - progress) * 100) + '%)';
       stage.style.transform = `scale(${1 - progress * 0.2})`;
       stage.style.borderRadius = `${progress * 12}px`;
       backdrop.style.opacity = String(progress);
@@ -116,7 +119,7 @@ export class Renderer {
     };
     const onUp = () => {
       if (!dragging) return; dragging = false;
-      snap(progress > 0.25);
+      snap(progress > 0.20);
     };
 
     const onTouchStart = (e: TouchEvent) => { if (inputFocused || isInteractive(e.target)) return; onDown(e.touches[0].clientY); };
