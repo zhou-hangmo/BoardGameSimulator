@@ -93,7 +93,8 @@ export class Renderer {
       (drawer.style as any).webkitBackdropFilter = drawer.style.backdropFilter;
       drawer.style.transform = 'translateY(' + ((1 - progress) * 100) + '%)';
       stage.style.transform = `scale(${1 - progress * 0.2})`;
-      stage.style.borderRadius = `${progress * 12}px`;
+      stage.style.filter = 'blur(' + (progress * 8).toFixed(1) + 'px) saturate(' + (1 + progress * 0.3).toFixed(2) + ')';
+      stage.style.borderRadius = (progress * 12) + 'px';
     };
     const snap = (toOpen: boolean) => {
       open = toOpen;
@@ -130,6 +131,7 @@ export class Renderer {
     stage.addEventListener("touchstart", (e: TouchEvent) => { if(open) return; onTouchStart(e); }, { passive: true });
     window.addEventListener("touchmove", (e: TouchEvent) => {
       if (open && !canCloseDrawer()) { dragging = false; return; }
+      e.preventDefault();
       onMove(e.touches[0].clientY);
     }, { passive: false });
     window.addEventListener("touchend", () => onUp());
