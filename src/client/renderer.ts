@@ -103,7 +103,8 @@ export class Renderer {
       animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
       setTimeout(() => animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 }, { type: 'spring', bounce: 0.3, duration: 0.3 }), 250);
     };
-    const isInteractive = (el: any) => { while(el){ if(["INPUT","BUTTON","TEXTAREA","SELECT"].includes(el.tagName)) return true; el=el.parentElement; } return false; };
+    let inputFocused = false;
+    const isInteractive = (el: any) => inputFocused || (() => { while(el){ if(["INPUT","BUTTON","TEXTAREA","SELECT"].includes(el.tagName)) return true; el=el.parentElement; } return false; })();
     const onDown = (y: number) => { if(isInteractive((window.event as any)?.target)) return;
       dragging = true; dragStart = y;
       animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });

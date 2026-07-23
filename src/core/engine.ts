@@ -166,8 +166,6 @@ export class GameEngine {
     this.state = newState;
 
     // 4. 持久化快照
-    this.saveSnapshot();
-
     // 5. L3 后置钩子
     await this.callWorker('hook', 'after_state_update', [this.state]);
 
@@ -247,25 +245,9 @@ export class GameEngine {
     return value;
   }
 
-  // ========== 持久化 ==========
 
-  private saveSnapshot(): void {
-    try {
-      localStorage.setItem('room_snapshot_current', JSON.stringify(this.state));
-    } catch {
-      // localStorage不可用时静默失败
-    }
-  }
 
-  static loadSnapshot(): GameState | null {
-    try {
-      const raw = localStorage.getItem('room_snapshot_current');
-      if (raw) return JSON.parse(raw) as GameState;
-    } catch {
-      // 解析失败
-    }
-    return null;
-  }
+
 
   // ========== 生命周期 ==========
 

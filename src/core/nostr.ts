@@ -66,7 +66,7 @@ export function createNostrRoom(_appName: string): RoomAPI {
         sockets.push(ws);
         ws.onopen = () => {
           // Subscribe to room events
-          ws.send(JSON.stringify(['REQ', tag, { kinds: [1], '#t': [tag], limit: 0 }]));
+          ws.send(JSON.stringify(['REQ', tag, { kinds: [1], '#t': [tag] }])); // historical+live events
         };
         ws.onmessage = (ev: MessageEvent) => {
           const data = JSON.parse(ev.data);

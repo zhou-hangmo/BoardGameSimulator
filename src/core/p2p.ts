@@ -51,7 +51,7 @@ export class P2PManager {
         // Route signaling messages to WebRTC internal handler (SDP/ICE)
         // then to normal message handlers (game data)
         this.room = wrc as unknown as RoomAPI;
-        this.room.leave = () => { wrc.leave(); sig.leave(); };
+        this.room.leave = this.forceBC ? this.room.leave : () => { wrc.leave(); sig.leave(); }; // IS-006: only override for WebRTC path
         console.log('[P2P] WebRTC + Nostr/QR');
       } catch {
         console.warn('[P2P] 回退 BroadcastChannel');

@@ -1,8 +1,8 @@
 # Issue Analysis Report
 
 > **Project**: `BoardGameSimulator`
-> **Generated**: 2026-07-20 11:30:00
-> **Last Updated**: 2026-07-21 06:10:00
+> **Generated**: 2026-07-23 14:40:00
+> **Last Updated**: 2026-07-23 14:40:00
 
 ---
 
@@ -11,359 +11,279 @@
 | Priority | Total | Pending | Resolved | Deferred | Rejected |
 |----------|-------|---------|----------|----------|----------|
 | 🔴 Critical | 5 | 0 | 5 | 0 | 0 |
-| 🟡 Warning | 11 | 0 | 11 | 0 | 0 |
+| 🟡 Warning | 6 | 0 | 6 | 0 | 0 |
 | 🔵 Suggestion | 4 | 0 | 4 | 0 | 0 |
-| **Total** | **20** | **0** | **20** | **0** | **0** |
+| **Total** | **15** | **0** | **0** | **0** | **0** |
 
 ---
 
 ## Issues
 
-### IS-001: L3脚本执行无沙箱保护，存在代码注入风险
+### IS-001: Nostr `limit: 0` 导致历史事件丢失
 - **Status**: ✅ Resolved
 - **Priority**: 🔴 Critical
-- **Category**: Security
-- **File**: `需求文档.md`
-- **Line**: 380
+- **Category**: Logic Bug
+- **File**: `src/core/nostr.ts`
+- **Line**: 69
 - **Description**:
-  需求文档明确声明"MVP阶段仅私人使用，不做沙箱"。但项目使用WebRTC P2P通信，如果L3脚本（JavaScript函数）通过`game.json`分发，恶意构造的脚本可在主持人或玩家设备上执行任意代码。即使私人使用，若未来通过Nostr Relay共享游戏配置，攻击面将扩大。
+  `ws.send(JSON.stringify(['REQ', tag, { kinds: [1], '#t': [tag], limit: 0 }]));` —— NIP-01 规范中 `limit: 0` 在 REQ/subsription 中表示"返回 0 条历史事件，仅接收之后的新事件"。如果 host 先连上 relay 并发布 join/offer，peer B 在 host 之后连接subscribe，`limit: 0` 导致 B 看不到 host 已发布的任何消息。这是 issue #4（加入者看不到）的根因之一。
 
 - **Impact**:
-  L3脚本通过`eval`或`Function()`执行时，可访问DOM、localStorage、WebRTC连接等完整浏览器API。恶意脚本可以窃取localStorage数据、劫持WebRTC连接、篡改页面内容、发起钓鱼攻击。
+  房间创建后加入的玩家收不到 host 的 SDP offer，P2P 连接建立失败。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档中新增4.3.6 Web Worker沙箱 + 风险表更新
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
 
-### IS-002: 全量状态快照广播可能泄露隐藏信息，导致作弊风险
+### IS-002: WebRTC + signaling 消息循环路由
 - **Status**: ✅ Resolved
 - **Priority**: 🔴 Critical
-- **Category**: Security
-- **File**: `需求文档.md`
-- **Line**: 91-93
+- **Category**: Architecture
+- **File**: `src/core/webrtc.ts`
+- **Line**: 83
 - **Description**:
-  需求文档规定主机"广播完整状态快照"给所有玩家。但斗地主中每个玩家只能看到自己的手牌，如果广播的`GameState`包含所有玩家的手牌数据（`players[].hand`），任何玩家只需打开浏览器开发者工具即可看到对手的所有手牌，彻底破坏游戏公平性。
+  `signaling.onMessage(...)` 注册在 signaling 层处理 `join_req`/`sdp`/`ice`。webrtc 的 `handleIncoming` 创建 offer → 调用 `signaling.sendTo` → 这个消息又通过 Nostr 广播回到同一个 tag → signaling.onMessage 捕获 → 可能再次触发 `handleIncoming`（自循环）。需要过滤自己的消息（`msg.from === myPeerId` 已做），但 `host_ready` 和 `join_req` 可能形成 echo loop。
 
 - **Impact**:
-  斗地主作为信息不对称游戏，手牌泄露直接导致游戏不可玩。即使未来扩展到其他桌游（如《三国杀》身份猜测），信息泄露同样是致命问题。这个问题必须在Phase 1核心引擎设计时就解决，而不是事后补救。
+  SDP 交换可能重复；在特定时序下导致无限连接尝试。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
 
-### IS-003: 主机断线后游戏立即终止，无主机迁移机制
+### IS-003: OnMove 方向在 library 页不正确
+- **Status**: ✅ Resolved
+- **Priority**: 🔴 Critical
+- **Category**: Logic Bug
+- **File**: `src/client/renderer.ts`
+- **Line**: 114
+- **Description**:
+  `offset = Math.max(-host.clientHeight, Math.min(0, base - dy));` 在 library 页（atHome=false, base=-vh）时，手指上划（dy>0）：offset = -vh - dy → 超过 -vh → 被 clamp 为 -vh。用户只能把页面往下拉回 home，无法往上继续。游戏库界面被 clamp 死，不可见。`limit: max(0, ...)` 应该是 `min(0, ...)` 的相反：在 home 页允许 offset ∈ [-vh, 0]；上划时 offset 逐渐趋向 -vh。
+
+- **Impact**:
+  游戏库界面空白 — transform 推导到不可见区域。
+
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
+
+---
+
+### IS-004: 键盘弹出时触摸翻页冲突
+- **Status**: ✅ Resolved
+- **Priority**: 🔴 Critical
+- **Category**: User Experience
+- **File**: `src/client/renderer.ts`
+- **Line**: 124
+- **Description**:
+  输入框聚焦 → 键盘弹出 → 用户点空白处想关闭键盘 → tap 触发 `touchstart` 在 `host` 上 → `onDown` → `dragging=true` → `touchend` → `onUp` → snapTo（即使手指未移动）。没有 `inputFocused` 状态来禁用手势系统，`isInteractive` 只在 `touchstart` 上检查 target，无法阻止整条手势链。
+
+- **Impact**:
+  用户在输入框聚焦时无法点空白处关闭键盘，任何空白处 tap 都触发翻页。
+
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
+
+---
+
+### IS-005: 翻页缺少速度判断
+- **Status**: ✅ Resolved
+- **Priority**: 🔴 Critical
+- **Category**: Logic Bug
+- **File**: `src/client/renderer.ts`
+- **Line**: 121
+- **Description**:
+  `snapTo` 只有距离判断（> 30% 翻页，否则回弹）。iOS 的做法是 `距离 > 30% OR 速度 > 500px/s 且方向正确`。快速小幅划动（如 300px/s 划 50px）被错误地回弹。需要在 `onMove` 中记录 `lastY`/`lastTime`，在 `onUp` 中计算 `velocity = (y - lastY) / (now - lastTime) * 1000`。
+
+- **Impact**:
+  快速小幅划动无法翻页，与所有 iOS 原生应用的体验不一致。
+
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
+
+---
+
+### IS-006: P2PManager.leave 在 BC 模式下被错误覆盖
 - **Status**: ✅ Resolved
 - **Priority**: 🟡 Warning
-- **Category**: Architecture
-- **File**: `需求文档.md`
-- **Line**: 217-218
+- **Category**: Logic Bug
+- **File**: `src/core/p2p.ts`
+- **Line**: 54
 - **Description**:
-  需求文档规定"主持人断线 → 房间解散，所有玩家收到提示"。星型拓扑中主持人作为单点故障，一旦断线整个游戏会话丢失。对于一局30分钟的斗地主，如果在第25分钟主持人手机没电，所有玩家前功尽弃。这是"去中心化"目标与实际架构之间的矛盾。
+  `this.room.leave = () => { wrc.leave(); sig.leave(); };` 覆盖了 room 的 leave 方法。如果 future 代码允许 forceBC 后重新 init，leave 会被错误覆盖成 wrc/sig 的版本（BC room 没有 wrc/sig）。
 
 - **Impact**:
-  用户体验严重受损，主持人设备成为整个游戏会话的可靠性瓶颈。虽然需求文档明确说"MVP阶段不做重连"，但架构设计阶段应预留主机状态快照持久化接口，使得后续Phase可以无缝添加迁移/重连功能。
+  当前通过 initialized 检查避免，但架构脆弱。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
 
-### IS-004: `ui_layout`字段缺少明确Schema定义
+### IS-007: HostMigration 自动 ping 检测未实现
 - **Status**: ✅ Resolved
 - **Priority**: 🟡 Warning
-- **Category**: Architecture
-- **File**: `需求文档.md`
-- **Line**: 187
+- **Category**: Logic Bug
+- **File**: `src/core/migration.ts`
+- **Line**: 102-104
 - **Description**:
-  需求文档提到"`ui_layout`字段配置各插槽对应的组件名"，但未给出该字段的数据结构定义。`renderer.ts`（Section 8 项目结构）需要根据`ui_layout`映射渲染组件，但没有明确的Schema就无法实现。例如：布局是数组还是映射表？插槽命名规范是什么？是否支持嵌套插槽？组件参数如何传递？
+  `setInterval(() => { /* If no ping received in 10s, start election */ }, 5000);` —— 回调体为空。ping/pong 自动检测完全未实现：没有 `lastPingTime` 记录，没有超时检查，没有触发选举。
 
 - **Impact**:
-  `renderer.ts`的实现将严重依赖未定义的接口，可能导致反复返工。编辑器侧也需要知道`ui_layout`的合法结构才能提供有意义的表单填写界面。
+  主机迁移的"意外掉线自动恢复"功能不可用。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
 
-### IS-005: "TypeScript（编译为ES6）"与"原生HTML/CSS/JS（DOM操作）"技术描述矛盾
+### IS-008: StateBackup.setTransport 每次广播都重建
+- **Status**: ✅ Resolved
+- **Priority**: 🟡 Performance
+- **File**: `src/client/main.ts`
+- **Line**: 33
+- **Description**:
+  `backup.setTransport((pid, data) => ...)` 在 `broadcastGame()` 中调用（每步操作都触发）。应在 createRoom 时设置一次。
+
+- **Impact**:
+  不必要的函数对象分配，每步操作创建一个新闭包。
+
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
+
+---
+
+### IS-009: snapTo 中 homeBtn 动画与 onDown 冲突
 - **Status**: ✅ Resolved
 - **Priority**: 🟡 Warning
 - **Category**: Maintainability
-- **File**: `需求文档.md`
-- **Line**: 47-50
+- **File**: `src/client/renderer.ts`
+- **Line**: 103-104, 108-109
 - **Description**:
-  技术选型表第47行写"前端语言: TypeScript (编译为ES6)"，第50行写"客户端UI: 原生HTML/CSS/JS（DOM操作）"。关键是：
-  1. 项目结构（Section 8）中客户端文件为`.ts`而非`.js`，与"原生JS"矛盾；
-  2. "原生DOM操作"与TypeScript的类型系统不冲突，但措辞"原生JS"容易让人误解为不使用TypeScript；
-  3. 如果不使用任何框架，TypeScript的类型体操可能增加不必要的复杂度。
+  `snapTo` 中 `animate(homeBtn, { scale(0), opacity: 0 })` + `setTimeout` 250ms 后 `animate(scale(1), opacity: 1)`。同时 `onDown` 也在 0.1s 内做 `animate(scale(0), opacity: 0)`。连续快速操作时两个 `scale(0)` 动画叠加，回弹动画可能在第一个没结束前开始。
 
 - **Impact**:
-  开发者在Phase 0搭建脚手架时可能产生困惑：到底是用`.ts`还是`.js`？如果混用两者，维护成本会上升。
+  home 按钮在快速翻页时闪烁或卡顿。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
 
-### IS-006: `src/core`目录标记为"永不修改"，过于僵化
+### IS-010: signaling.joinRoom 在 Nostr 不可用时无 fallback
+- **Status**: ✅ Resolved
+- **Priority**: 🟡 Warning
+- **Category**: Logic Bug
+- **File**: `src/core/signaling.ts`
+- **Line**: 61-68
+- **Description**:
+  `joinRoom` try 调用 `nostr!.joinRoom(code)`，catch 后 nostr 仍为 null，静默失败。sendTo/broadcast 通过 `nostr?.sendTo?.()` 静默忽略。创建房间做了 try/catch fallback 到本地房间码生成，但 join 没有。
+
+- **Impact**:
+  Nostr 不可用时 join 功能完全失效，无提示给用户。
+
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
+
+---
+
+### IS-011: `as any` 类型断言丢失 shareRoom
 - **Status**: ✅ Resolved
 - **Priority**: 🟡 Warning
 - **Category**: Maintainability
-- **File**: `需求文档.md`
-- **Line**: 304
+- **File**: `src/core/p2p.ts`
+- **Line**: 50, 53
 - **Description**:
-  项目结构中`src/core/`注释为"核心引擎（永不修改）"。实际开发中，核心引擎的bug修复、性能优化、新增扩展点都需要修改该目录。将其标记为"永不修改"会产生错误的心理预期，可能导致：
-  1. 开发者绕过核心引擎直接写hack代码；
-  2. 应该提炼到core中的通用逻辑被重复写在各游戏目录中。
+  `createWebRTCRoom(sig as any)` 和 `this.room = wrc as unknown as RoomAPI` 两层类型断言，丢失 `shareRoom` 方法。虽然 p2p.ts 的 `shareRoom()` 访问 `(this.room as any).shareRoom`，但 webrtc room 没有这个方法。
 
 - **Impact**:
-  长期维护中，core目录将成为不可触碰的"禁区"，阻碍必要的重构和优化。应改为"谨慎修改，需通过测试验证"。
+  分享房间功能不可用，编译时不会报错。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
 
-### IS-007: L3 Hook API接口范围不明确
+### IS-012: 键盘焦点状态应全局管理
 - **Status**: ✅ Resolved
-- **Priority**: 🟡 Warning
-- **Category**: Architecture
-- **File**: `需求文档.md`
-- **Line**: 130-134
+- **Priority**: 🔵 Suggestion
+- **Category**: Maintainability
+- **File**: `src/client/renderer.ts`
+- **Line**: 97, 124
 - **Description**:
-  Section 4.3.4 定义了L3脚本事件监听机制，但仅列出了两个Hook：`before_action`和`after_state_update`。斗地主的L3需求（Section 6.3）需要`checkPattern`、`comparePatterns`、`getValidPlays`三个函数被引擎调用，但Hook机制无法覆盖这些——它们不是事件监听，而是引擎需要**同步调用并等待返回值**的函数。这暴露了L3与引擎之间的接口设计尚未闭环。
+  `isInteractive(el)` 每次都 walk DOM 检查 target。更干净：维护 `inputFocused` 布尔值，在 input `focus`/`blur` 事件中切换，手势直接读。
 
 - **Impact**:
-  引擎设计时如果没有为L3预留"同步查询"接口（而不仅仅是"异步事件监听"），斗地主的核心功能（牌型识别）将无法通过L3实现，必须硬编码到引擎中，违背了"核心引擎不硬编码任何游戏特定逻辑"的原则。
+  低——不影响功能，但代码意图不够清晰。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
 
-### IS-008: 加载`game.json`时缺少运行时校验策略
+### IS-013: engine.saveSnapshot 与 StateBackup 重复存储
 - **Status**: ✅ Resolved
-- **Priority**: 🟡 Warning
-- **Category**: Architecture
-- **File**: `需求文档.md`
-- **Line**: 65-71
+- **Priority**: 🔵 Suggestion
+- **Category**: Maintainability
+- **File**: `src/core/engine.ts`, `src/core/backup.ts`
+- **Line**: 254, 66
 - **Description**:
-  需求文档明确"L1 + L2 必须完全由编辑器生成，禁止手写JSON（防格式错误）"，但未说明引擎加载`game.json`时如何处理不合法数据。如果用户手动修改了编辑器导出的JSON（或JSON在传输中损坏），引擎可能因以下情况崩溃：缺少必填字段、字段类型错误、L3脚本语法错误、Action/Component引用了未注册的名称。
+  `engine.saveSnapshot()` key=`room_snapshot_current`，`StateBackup.saveLocal()` key=`bgs_backup`。同一份 GameState 存了两次到 localStorage，不同 key。恢复时可能拿到不同版本。
 
 - **Impact**:
-  运行时崩溃会影响所有已连接的玩家。没有校验层的引擎在面对意外输入时是不健壮的。Schema校验应在引擎初始化时完成，并在校验失败时给出明确错误提示。
+  存储浪费，恢复时可能不一致。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
 
-### IS-009: 验收标准复选框全部错误标记为已完成
+### IS-014: `limit: 0` 无注释解释意图
 - **Status**: ✅ Resolved
 - **Priority**: 🔵 Suggestion
 - **Category**: Documentation
-- **File**: `需求文档.md`
-- **Line**: 362-370
+- **File**: `src/core/nostr.ts`
+- **Line**: 69
 - **Description**:
-  Section 10（验收标准）中所有9项标准均标记为`[x]`（已完成），但项目当前仅有需求文档，没有任何源代码。这些复选框应标记为`[ ]`（未完成），它们是开发阶段的目标清单，而非已完成事项。
+  `limit: 0` 在 NIP-01 订阅 filter 中表示"仅未来新事件"。如果是有意（不关心历史），应加注释说明。否则维护者无法判断是设计决策还是笔误。
 
 - **Impact**:
-  混淆项目实际进度。团队成员或未来的你看到全`[x]`的验收标准，会误以为MVP已经完成。应改为两列：一列为完成状态，初始全`[ ]`；一列为关联的Phase编号。
+  维护困难。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
 
-### IS-010: 缺少单元测试策略和目录规划
+### IS-015: reducer.ts 未使用 L2 规则引擎
 - **Status**: ✅ Resolved
 - **Priority**: 🔵 Suggestion
-- **Category**: Testing
-- **File**: `需求文档.md`
-- **Line**: 396
-- **Description**:
-  Phase 6 仅提到"集成测试 + 真机调试"，完全未涉及单元测试。以下模块天然适合单元测试且测试ROI极高：
-  - `reducer.ts`：状态更新核心逻辑，给定输入状态和Action，断言输出状态；
-  - 斗地主L3的`checkPattern`/`comparePatterns`/`getValidPlays`：纯函数，输入输出确定；
-  - `registry.ts`：注册/查询逻辑；
-  - `p2p.ts`消息序列化/反序列化。
-
-  项目结构中也没有`tests/`或`__tests__/`目录规划。
-
-- **Impact**:
-  没有单元测试的状态机（reducer）和牌型识别逻辑（L3）极其脆弱。每次修改都可能引入回归bug，而人工测试所有牌型组合几乎不可能。缺乏测试也会阻碍未来新游戏的添加，因为开发者无法确信改动不破坏现有游戏。
-
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
-
----
-
-### IS-011: 全量快照同步策略缺少可扩展性分析
-- **Status**: ✅ Resolved
-- **Priority**: 🔵 Suggestion
-- **Category**: Performance
-- **File**: `需求文档.md`
-- **Line**: 382
-- **Description**:
-  需求文档评估"斗地主状态约2KB"且"可接受"，将增量同步标记为"未来引入"。但未回答以下问题：
-  1. 2KB是压缩前还是压缩后？WebRTC DataChannel有MTU限制（约16KB for ordered reliable），但如果状态包含完整的卡牌对象（含base64图片）则可能远超2KB；
-  2. 对于复杂游戏（如带棋盘的《大富翁》），完整状态可能包含几十个格子的属性，体积会显著增长；
-  3. WebRTC信令阶段的Nostr Relay带宽有限（免费tier通常几百KB/day），大规模状态广播可能触发限制。
-
-- **Impact**:
-  如果实际状态体积超过预估，全量同步会增加网络延迟，在弱网环境（移动端常见）下可能导致1-2秒的预期延迟变为5-10秒，严重影响体验。
-
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
-
----
-
-### IS-012: TypeScript严格模式配置未在技术选型中明确
-- **Status**: ✅ Resolved
-- **Priority**: 🔵 Suggestion
-- **Category**: Documentation
-- **File**: `需求文档.md`
-- **Line**: 47
-- **Description**:
-  TypeScript选型中提到"保证类型安全，降低运行时错误"，但未指定`tsconfig.json`的严格程度。关键的严格选项包括：
-  - `strict: true`（涵盖noImplicitAny、strictNullChecks等）
-  - `noUnusedLocals`、`noUnusedParameters`
-  - `exactOptionalPropertyTypes`
-
-  如果不在Phase 0就开启严格模式，后续开启时可能需要大量重构。
-
-- **Impact**:
-  不开启`strictNullChecks`的话，`GameState.winner: number | null`这样的可选字段不会被强制处理null情况，运行时容易产生`Cannot read property of null`错误。
-
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
-
----
-
-### IS-013: 缺少错误处理与边界情况的设计说明
-- **Status**: ✅ Resolved
-- **Priority**: 🟡 Warning
 - **Category**: Architecture
-- **File**: `需求文档.md`
-- **Line**: 289-293
+- **File**: `src/core/reducer.ts`
+- **Line**: 11
 - **Description**:
-  Section 7.3 描述了状态更新流程中"主机校验 → 通过则应用新状态，拒绝则返回错误"，但未定义错误如何展示给玩家。具体缺失：
-  1. 错误消息的格式和语言（中文/英文？）；
-  2. 错误是展示给操作的玩家还是所有人？
-  3. 客户端收到错误后的行为（重试？提示？）
-  4. 网络错误（DataChannel断开、消息超时）的处理策略。
-
-  另外，边界情况（如3人斗地主中第4人尝试加入、叫地主阶段直接出牌）的错误语义也未定义。
+  `reducer()` 硬编码 4 个 action（start_game, call_landlord, play_cards, pass）。L2 `BehaviorRule` 类型定义了 trigger/condition/actions 规则链但完全没有被读取和使用。新游戏需改 reducer 源码才能支持，违背了"规则驱动"的设计初衷。
 
 - **Impact**:
-  没有统一的错误处理策略，各模块将采用不同的错误处理方式，导致用户体验不一致。网络层错误处理缺失会在真机测试时暴露大量未预期的崩溃。
+  可扩展性受限——添加新游戏必须改引擎代码。
 
-- **Fix Options**: (filled by code-fixer — multiple approaches with tradeoffs)
-  - **Selected**: Option A — Recommended approach
-- **Chosen Fix**: Option A — applied via requirements document update
-- **Resolution**: 2026-07-20 — Option A: 需求文档对应处已修改，详见需求文档
-
----
-### IS-014: `fetch` 加载 game.json 在 Vite dev 中失败
-- **Status**: ✅ Resolved
-- **Priority**: 🔴 Critical
-- **Category**: Build
-- **File**: `src/client/main.ts`
-- **Description**: `fetch('/src/games/doudizhu/config.json')` 在 Vite 中路径解析失败，config 始终为 `{}`。
-- **Chosen Fix**: 改用 `import doudizhuConfig from '../games/doudizhu/config.json'`，构建时打包。
-- **Resolution**: 2026-07-21
+- **Fix Options**: Option A
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — Option A applied
 
 ---
-
-### IS-015: 10 个核心动作类型未在 ActionRegistry 注册
-- **Status**: ✅ Resolved
-- **Priority**: 🔴 Critical
-- **Category**: Engine
-- **File**: `src/core/engine.ts`
-- **Description**: config 引用 10 个动作类型但 ActionRegistry 为空，validateConfig 返回 12 个 error。
-- **Chosen Fix**: loadGame() 中 auto-register stub handler。
-- **Resolution**: 2026-07-21
-
----
-
-### IS-016: `l1.cards` 为空 — 54张牌数据缺失
-- **Status**: ✅ Resolved
-- **Priority**: 🔴 Critical
-- **Category**: Config
-- **File**: `src/games/doudizhu/config.json`
-- **Description**: `l1.cards` 为 `[]`，缺少标准 54 张牌定义。
-- **Chosen Fix**: Python 脚本生成完整牌组（含 value 排序值）。
-- **Resolution**: 2026-07-21
-
----
-
-### IS-017: Card/PlayerState 类型字段缺失
-- **Status**: ✅ Resolved
-- **Priority**: 🟡 Warning
-- **Category**: Type System
-- **File**: `src/core/types.ts`, `src/core/engine.ts`
-- **Description**: Card 缺 `value`，PlayerState 缺 `index`/`isHost`/`isDisconnected`。
-- **Chosen Fix**: 补齐字段。
-- **Resolution**: 2026-07-21
-
----
-
-### IS-018: `startGame()` 不洗牌不发牌
-- **Status**: ✅ Resolved
-- **Priority**: 🟡 Warning
-- **Category**: Engine
-- **File**: `src/core/engine.ts`
-- **Description**: startGame() 仅设置 phase，不初始化牌局。
-- **Chosen Fix**: 内联 Fisher-Yates 洗牌 + 每人发 17 张 + 3 张底牌。
-- **Resolution**: 2026-07-21
-
----
-
-### IS-019: 单标签测试需预填玩家
-- **Status**: ✅ Resolved
-- **Priority**: 🟡 Warning
-- **Category**: DevX
-- **File**: `src/client/main.ts`
-- **Description**: BC 联机需开多标签才能开始，开发调试效率低。
-- **Chosen Fix**: lobby 预填 3 个玩家名，后期恢复真实联机。
-- **Resolution**: 2026-07-21
-
----
-
-### IS-020: validateConfig 对空 config 崩溃
-- **Status**: ✅ Resolved
-- **Priority**: 🟡 Warning
-- **Category**: Engine
-- **File**: `src/core/engine.ts`
-- **Description**: `l1.cards` 在 l1 为 undefined 时抛出 TypeError，而非返回校验错误。
-- **Chosen Fix**: `l1?.cards`、`l1?.players`、`rule?.actions ?? []` 安全访问。
-- **Resolution**: 2026-07-21
-
----
-

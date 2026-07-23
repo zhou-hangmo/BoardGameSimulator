@@ -27,6 +27,7 @@ export function createWebRTCRoom(
   const peerLeaves: ConnectionHandler[] = [];
   const msgHandlers: MessageHandler[] = [];
   const peers = new Map<string, { pc: RTCPeerConnection; dc: RTCDataChannel | null }>();
+  const seenMsgs = new Set<string>(); // dedup
   let myPeerId = '';
   let roomCode = '';
 
@@ -81,8 +82,10 @@ export function createWebRTCRoom(
   // Handle signaling messages from the transport layer
   // Register to receive SDP/ICE from signaling layer
   signaling.onMessage((_from: string, data: unknown) => {
-    const msg = data as { type: string; from: string; to?: string; payload?: unknown };
-    if (msg.from === myPeerId) return;
+    const msg = data as { type: string; from: string; to?: string; payload?: unknown; mid?: string };
+    const mid = msg.mid || JSON.stringify(msg).slice(0, 40);
+    if (seenMsgs.has(mid) || msg.from === myPeerId) return;
+    seenMsgs.add(mid);
 
     if (msg.type === 'join_req') {
       // Host receives join request

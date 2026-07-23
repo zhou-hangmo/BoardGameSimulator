@@ -15,6 +15,7 @@ export class HostMigration {
   private onBecomeHost: MigrateCB | null = null;
   private electionCB: PeerCB | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private lastPingTime = 0;
 
   constructor(backup: StateBackup) { this.backup = backup; }
 
@@ -77,7 +78,7 @@ export class HostMigration {
       return true;
     }
     if (msg.type === 'pong') {
-      // Host received pong — peer is alive
+      this.lastPingTime = Date.now();
       return true;
     }
     if (msg.type === 'election') {
@@ -100,7 +101,10 @@ export class HostMigration {
     if (!this.isHost) {
       // Non-host: expect pings from host
       this.pingTimer = setInterval(() => {
-        // If no ping received in 10s, start election
+        if (Date.now() - this.lastPingTime > 10000) {
+          // Host timeout — trigger election
+          this.broadcast?.({ type: 'election', payload: { candidates: this.peers } });
+        }
       }, 5000);
     }
   }

@@ -30,7 +30,6 @@ function broadcastGame() {
   if (!engine || !isHost) return;
   const state = engine.getState();
   // Backup to all peers
-  backup.setTransport((pid, data) => p2p.sendRaw(pid, (data as any).type, (data as any).payload));
   backup.broadcast(p2p.getPeerIds(), state);
   // Send player views
   for (let i = 0; i < state.players.length; i++) {
@@ -64,6 +63,7 @@ renderer.init({
     const g = installedGames.find(x => x.id === gameId);
     if (!g?.config || !(g.config as GameConfig).meta) { renderer.showToast('配置加载中，请稍后'); return ''; }
     await p2p.init();
+    backup.setTransport((pid, data) => p2p.sendRaw(pid, (data as any).type, (data as any).payload)); // IS-008
     room = await p2p.createRoom();
     isHost = true; myIdx = 0;
     migration.setup({
