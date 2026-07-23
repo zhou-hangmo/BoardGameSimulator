@@ -42,9 +42,9 @@ export class Renderer {
     // Persistent camera scan input (shared across all screens)
     const si = document.createElement('input');
     si.type = 'file';
-    si.setAttribute('accept', 'image/*');
-    si.setAttribute('capture', 'environment');
-    si.style.display = 'none';
+    si.accept = 'image/*';
+    (si as any).capture = 'environment';
+    si.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;';
     this.scanInput = si;
     document.body.appendChild(si);
   }
@@ -89,7 +89,7 @@ export class Renderer {
         }
       } catch { this.showToast('扫码失败，请手动输入'); }
     };
-    document.getElementById('btn-scan-home')?.addEventListener('pointerdown', () => this.scanInput.click());
+    document.getElementById('btn-scan-home')?.addEventListener('click', () => this.scanInput.click());
 
     const input = document.getElementById('code-input') as HTMLInputElement;
     const arrow = document.getElementById('arrow')!;
@@ -227,7 +227,7 @@ export class Renderer {
     this.renderSecondary('房间大厅', `<div class="sec-body"><div class="room-code"><div class="code">${code}</div><div style="color:var(--label2);margin-top:4px;">分享给好友</div></div>${qrHtml}<div class="section-hdr">玩家 (${ps.length})</div>${ps.map(p=>`<div class="player-row"><span class="dot g"></span>${p.name}${p.isHost?' (主持人)':''}</div>`).join('')}<button id="btn-start" class="btn btn-primary btn-block" style="margin-top:16px;" ${ps.length<2?'disabled':''}>开始游戏</button><button id="btn-share" class="btn btn-secondary btn-block" style="margin-top:8px;">📤 分享房间</button><button id="btn-scan-guest" class="btn btn-secondary btn-block" style="margin-top:4px;">📷 扫访客码</button></div>`);
     document.getElementById('btn-start')?.addEventListener('pointerdown', (e: any) => { if((e.target as HTMLButtonElement).disabled) return; this.cb.onStartGame(); });
     document.getElementById('btn-share')?.addEventListener('pointerdown', () => this.cb.onShareRoom());
-    document.getElementById('btn-scan-guest')?.addEventListener('pointerdown', () => {
+    document.getElementById('btn-scan-guest')?.addEventListener('click', () => {
       this.scanInput.setAttribute('capture', 'environment');
       this.scanInput.onchange = async () => {
         const f = this.scanInput.files?.[0]; if (!f) return;
