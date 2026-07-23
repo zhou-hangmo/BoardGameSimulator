@@ -15,7 +15,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:var(--font);font-si
 #app{width:100%;height:100%}
 
 /* === Merged scroll (home + library) === */
-.scroll-host{width:100%;overflow:hidden;will-change:transform;contain:layout style;}
+.scroll-host,.drawer{width:100%;overflow:hidden;will-change:transform;contain:layout style;}
 .scroll-host::-webkit-scrollbar{display:none}
 
 /* Home section */
@@ -117,3 +117,8 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:var(--font);font-si
 @media(prefers-reduced-transparency:reduce){.nav-bar,.game-top,.game-bar-bot{background:#fafafa;backdrop-filter:none;-webkit-backdrop-filter:none}}
 
 @media(min-width:401px){#app{width:400px;margin:0 auto;border-left:.33px solid var(--sep);border-right:.33px solid var(--sep)}}
+
+.main-stage{transition:none;will-change:transform;border-radius:0;position:relative;z-index:1;}
+.drawer-backdrop{position:fixed;inset:0;z-index:2;background:rgba(0,0,0,0.3);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:none;}
+.drawer{position:fixed;bottom:0;left:0;right:0;z-index:3;background:#1a1a2e;border-radius:20px 20px 0 0;overflow:hidden;transform:translateY(100%);will-change:transform;max-height:100vh;}
+.drawer-scroll{overflow-y:auto;height:100vh;padding-bottom:40px;}

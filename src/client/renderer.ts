@@ -40,48 +40,33 @@ export class Renderer {
   init(cb: AppCallbacks) { this.cb = cb; this.showHomeLibrary(); }
 
   // ========== HOME + LIBRARY (merged scroll) ==========
+  // ========== HOME + DRAWER (iOS style) ==========
   showHomeLibrary(): void {
     this.gameBuilt = false;
     const games = this.cb.installedGames;
-    this.el.innerHTML = `
-      <div class="scroll-host" id="scroll-host">
-        <section class="home-sec">
-          <input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div>
+    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer-backdrop" id="drawer-backdrop"></div><div class="drawer" id="drawer"><div class="nav-bar"><span class="nav-title">游戏库</span></div><div class="drawer-scroll">${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div class="cell" id="cell-import"><div class="cell-icon import">+</div><div class="cell-body"><div class="cell-title">导入 game.json</div></div></div><div style="height:60px;"></div></div></div>`;
 
-          <div class="input-wrap" id="wrap">
-            <input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" />
-            <div class="input-arrow" id="arrow">${ARROW_SVG}</div>
-          </div>
-        </section>
-        <section class="lib-sec" id="lib-section">
-          <div class="nav-bar"><span class="nav-title">游戏库</span></div>
-          ${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}
-          <div class="cell" id="cell-import"><div class="cell-icon import">+</div><div class="cell-body"><div class="cell-title">导入 game.json</div></div></div>
-          <div style="height:60px;"></div>
-        </section>
-      </div>
-      `;
-// Load QR button
+    const stage = document.getElementById('main-stage')!;
+    const drawer = document.getElementById('drawer')!;
+    const backdrop = document.getElementById('drawer-backdrop')!;
+    const homeBtn = document.getElementById('global-home')!;
+    const vh = () => window.innerHeight;
+
     const loadInput = document.getElementById('load-input') as HTMLInputElement;
     loadInput?.addEventListener('change', async () => {
       const f = loadInput.files?.[0]; if (!f) return;
       this.showToast('加载中...');
-      try {
-        const text = await f.text();
-        const data = JSON.parse(text);
-        // Check if it is a game state directly
+      try { const text = await f.text(); const data = JSON.parse(text);
         if (data.players) { this.cb.onLoadGame(text); return; }
-        // Try QR decode
-        const { decodeQR } = await import('../core/qrcode');
-        const sd = decodeQR(text);
+        const { decodeQR } = await import('../core/qrcode'); const sd = decodeQR(text);
         if (sd?.sdp) { this.cb.onLoadGame(sd.sdp); return; }
-        this.showToast('无法识别');
-      } catch { this.showToast('文件无效'); }
+        this.showToast('无法识别'); } catch { this.showToast('文件无效'); }
     });
     document.getElementById('btn-load')?.addEventListener('pointerdown', () => loadInput?.click());
-    // Input
+
     const input = document.getElementById('code-input') as HTMLInputElement;
     const arrow = document.getElementById('arrow')!;
+    let inputFocused = false;
     input.addEventListener('focus', () => { inputFocused = true; });
     input.addEventListener('blur', () => { inputFocused = false; });
     input.addEventListener('input', () => {
@@ -92,70 +77,63 @@ export class Renderer {
       if (input.value.length !== 6) return; input.blur();
       try { await this.cb.onJoinRoom(input.value); } catch { this.showToast('加入失败'); }
     });
-    // iOS-style drag + snap (transform-based)
-    const host = document.getElementById('scroll-host')!;
-    const homeBtn = document.getElementById('global-home')!;
-    let atHome = true; let dragging = false; let dragStart = 0; let offset = 0;
-    let snapAnim: ReturnType<typeof animate> | null = null;
-    let btnAnim: ReturnType<typeof animate> | null = null;
 
-    const vh = () => window.innerHeight;
+    let open = false; let dragging = false; let dragStart = 0; let progress = 0;
+    let drawAnim: ReturnType<typeof animate> | null = null;
 
-    const snapTo = (toHome: boolean) => {
-      atHome = toHome;
-      offset = toHome ? 0 : -vh();
-      snapAnim?.stop(); snapAnim = animate(host, { transform: `translateY(${offset}px)` },
-        { type: 'spring', stiffness: 300, damping: 28 });
-      btnAnim?.stop();
-      btnAnim = animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
-      setTimeout(() => {
-        btnAnim?.stop();
-        btnAnim = animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 },
-          { type: 'spring', bounce: 0.3, duration: 0.3 });
-      }, 200);
-    };
-    snapTo(true); // initial position
-
-    let inputFocused = false;
     const isInteractive = (el: any): boolean => {
       while (el) { if (['INPUT','BUTTON','TEXTAREA','SELECT'].includes(el.tagName)) return true; el = el.parentElement; }
       return false;
     };
-    const onDown = (y: number) => {
-      dragging = true; dragStart = y;
-      btnAnim?.stop();
-      btnAnim = animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
+    const apply = (p: number) => {
+      progress = Math.max(0, Math.min(1, p));
+      drawer.style.transform = `translateY(${(1 - progress) * 100}%)`;
+      stage.style.transform = `scale(${1 - progress * 0.2})`;
+      stage.style.borderRadius = `${progress * 12}px`;
+      backdrop.style.opacity = String(progress);
+      backdrop.style.pointerEvents = progress > 0.01 ? 'auto' : 'none';
     };
+    const snap = (toOpen: boolean) => {
+      open = toOpen;
+      drawAnim?.stop();
+      drawAnim = animate({ p: progress }, { p: toOpen ? 1 : 0 }, {
+        onUpdate: (v: any) => apply(v.p),
+        type: 'spring', stiffness: 300, damping: 28,
+      });
+      animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
+      setTimeout(() => animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 },
+        { type: 'spring', bounce: 0.3, duration: 0.3 }), 200);
+    };
+    apply(0);
+
+    const onDown = (y: number) => { dragging = true; dragStart = y; };
     const onMove = (y: number) => {
       if (!dragging) return;
       const dy = dragStart - y;
-      const base = atHome ? 0 : -vh();
-      offset = Math.max(-vh(), Math.min(0, base - dy));
-      snapAnim?.stop();
-      host.style.transform = `translateY(${offset}px)`;
+      apply(open ? 1 - dy / vh() : dy / vh());
     };
     const onUp = () => {
       if (!dragging) return; dragging = false;
-      const target = atHome ? 0 : -vh();
-      const dist = Math.abs(offset - target);
-      snapTo(dist > vh() * 0.20 ? !atHome : atHome);
+      snap(progress > 0.25);
     };
 
-    host.addEventListener('touchstart', e => { if(inputFocused || isInteractive(e.target)) return; onDown(e.touches[0].clientY); }, { passive: true });
-    host.addEventListener('touchmove', e => onMove(e.touches[0].clientY), { passive: true });
-    host.addEventListener('touchend', () => onUp());
-    host.addEventListener('mousedown', e => { if(isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
-    window.addEventListener('mousemove', e => onMove(e.clientY));
-    window.addEventListener('mouseup', () => onUp());
-    host.addEventListener('wheel', e => {
+    const onTouchStart = (e: TouchEvent) => { if (inputFocused || isInteractive(e.target)) return; onDown(e.touches[0].clientY); };
+    drawer.addEventListener('touchstart', onTouchStart, { passive: true });
+    stage.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', (e: TouchEvent) => onMove(e.touches[0].clientY), { passive: true });
+    window.addEventListener('touchend', () => onUp());
+    document.addEventListener('wheel', (e: WheelEvent) => {
+      if (inputFocused) return;
       e.preventDefault();
-      if (e.deltaY > 0 && atHome) snapTo(false);
-      else if (e.deltaY < 0 && !atHome) snapTo(true);
+      if (e.deltaY > 0 && !open) snap(true);
+      else if (e.deltaY < 0 && open) snap(false);
     }, { passive: false });
-    // Home button + Library clicks
+
     this.el.querySelectorAll('.cell[data-gid]').forEach(c => c.addEventListener('click', () => this.showGameDetail((c as HTMLElement).dataset.gid!)));
     document.getElementById('cell-import')?.addEventListener('click', () => this.cb.onImportGame());
+    backdrop.addEventListener('pointerdown', () => { if (open) snap(false); });
   }
+
 
   // ========== SECONDARY SCREENS ==========
   private renderSecondary(title: string, body: string): void {
