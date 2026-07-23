@@ -44,7 +44,7 @@ export class Renderer {
   showHomeLibrary(): void {
     this.gameBuilt = false;
     const games = this.cb.installedGames;
-    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer" id="drawer"><div class="drawer-scroll">${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div class="cell" id="cell-import"><div class="cell-icon import">+</div><div class="cell-body"><div class="cell-title">导入 game.json</div></div></div><div style="height:60px;"></div></div></div>`;
+    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer" id="drawer"><div class="drawer-import-pill" id="cell-import"><span class="pill-plus">+</span></div><div class="drawer-scroll" id="drawer-scroll">${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div style="height:60px;"></div></div></div>`;
 
     const stage = document.getElementById('main-stage')!;
     const drawer = document.getElementById('drawer')!;
@@ -118,11 +118,21 @@ export class Renderer {
       snap(progress > 0.20);
     };
 
-    const onTouchStart = (e: TouchEvent) => { if (inputFocused || isInteractive(e.target)) return; onDown(e.touches[0].clientY); };
-    drawer.addEventListener('touchstart', onTouchStart, { passive: true });
-    stage.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchmove', (e: TouchEvent) => onMove(e.touches[0].clientY), { passive: true });
-    window.addEventListener('touchend', () => onUp());
+    const dScroll = document.getElementById("drawer-scroll")!;
+    const canCloseDrawer = () => open && dScroll.scrollTop <= 2;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (inputFocused || isInteractive(e.target)) return;
+      if (open && !canCloseDrawer()) return;
+      onDown(e.touches[0].clientY);
+    };
+    drawer.addEventListener("touchstart", onTouchStart, { passive: false });
+    stage.addEventListener("touchstart", (e: TouchEvent) => { if(open) return; onTouchStart(e); }, { passive: true });
+    window.addEventListener("touchmove", (e: TouchEvent) => {
+      if (open && !canCloseDrawer()) { dragging = false; return; }
+      onMove(e.touches[0].clientY);
+    }, { passive: false });
+    window.addEventListener("touchend", () => onUp());
     // Mouse drag
     drawer.addEventListener('mousedown', (e: MouseEvent) => { if (isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
     stage.addEventListener('mousedown', (e: MouseEvent) => { if (isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
