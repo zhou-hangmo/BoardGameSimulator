@@ -1,0 +1,18 @@
+{
+  "name": "BoardGame",
+  "short_name": "桌游",
+  "description": "去中心化的通用桌游模拟器",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "./assets/icons/app-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
