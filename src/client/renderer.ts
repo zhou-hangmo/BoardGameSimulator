@@ -5,6 +5,8 @@
 import { animate } from 'motion';
 import type { PlayerView } from '../core/types';
 
+declare const __COMMIT__: string;
+
 const ARROW_SVG = `<svg viewBox="0 0 20 20" fill="none" stroke="#0088ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l6 6-6 6"/></svg>`;
 
 export interface GameMeta {
@@ -64,7 +66,7 @@ export class Renderer {
     });
     document.getElementById('btn-load')?.addEventListener('pointerdown', () => loadInput?.click());
 
-    document.getElementById('commit-count')!.textContent = '#' + (window as any).__COMMIT_COUNT__;
+    document.getElementById('commit-count')!.textContent = '#' + __COMMIT__;
 
     document.getElementById('btn-scan-home')?.addEventListener('click', () => this.startScanner((data) => {
       this.cb.onJoinRoom(JSON.stringify(data));

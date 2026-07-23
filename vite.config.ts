@@ -11,7 +11,7 @@ const COMMIT_COUNT = (() => {
 export default defineConfig({
   root: '.',
   base: '/BoardGameSimulator/',
-  define: { __COMMIT_COUNT__: JSON.stringify(COMMIT_COUNT) },
+  define: { '__COMMIT__': JSON.stringify(COMMIT_COUNT) },
   build: {
     outDir: 'docs',
     target: 'es2020',
