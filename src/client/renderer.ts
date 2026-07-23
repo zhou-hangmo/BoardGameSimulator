@@ -134,14 +134,15 @@ export class Renderer {
     drawer.addEventListener("touchstart", onTouchStart, { passive: false });
     stage.addEventListener("touchstart", (e: TouchEvent) => { if(open) return; onTouchStart(e); }, { passive: true });
     window.addEventListener("touchmove", (e: TouchEvent) => {
+      if (!dragging) return;
       if (open && !canCloseDrawer()) { dragging = false; return; }
       e.preventDefault();
       onMove(e.touches[0].clientY);
     }, { passive: false });
-    window.addEventListener("touchend", () => onUp());
+    window.addEventListener("touchend", () => { if (!dragging) return; onUp(); });
     // Mouse drag
-    drawer.addEventListener('mousedown', (e: MouseEvent) => { if (isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
-    stage.addEventListener('mousedown', (e: MouseEvent) => { if (isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
+    drawer.addEventListener('mousedown', (e: MouseEvent) => { if (hasKeyboard() || isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
+    stage.addEventListener('mousedown', (e: MouseEvent) => { if (hasKeyboard() || isInteractive(e.target)) return; e.preventDefault(); onDown(e.clientY); });
     window.addEventListener('mousemove', (e: MouseEvent) => onMove(e.clientY));
     window.addEventListener('mouseup', () => onUp());
     // Wheel
