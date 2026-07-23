@@ -100,10 +100,12 @@ export class Renderer {
       open = toOpen;
       apply(toOpen ? 1 : 0, true);
       animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
-      setTimeout(() => animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 },
-        { type: 'spring', bounce: 0.3, duration: 0.3 }), 200);
+      setTimeout(restoreHomeBtn, 200);
     };
     apply(0);
+
+    const restoreHomeBtn = () => animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 },
+      { type: 'spring', bounce: 0.3, duration: 0.3 });
 
     const onDown = (y: number) => {
       dragging = true; moved = false; dragStart = y;
@@ -117,7 +119,7 @@ export class Renderer {
     };
     const onUp = () => {
       if (!dragging) return; dragging = false;
-      if (!moved) return;
+      if (!moved) { restoreHomeBtn(); return; }
       snap(open ? progress >= 0.80 : progress > 0.20);
     };
 
