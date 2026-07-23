@@ -48,7 +48,6 @@ export class Renderer {
 
     const stage = document.getElementById('main-stage')!;
     const drawer = document.getElementById('drawer')!;
-    const backdrop = document.getElementById('drawer-backdrop')!;
     const homeBtn = document.getElementById('global-home')!;
     const vh = () => window.innerHeight;
 
@@ -89,15 +88,12 @@ export class Renderer {
       progress = Math.max(0, Math.min(1, p));
       drawer.style.transition = anim ? tr : 'none';
       stage.style.transition = anim ? tr : 'none';
-      backdrop.style.transition = anim ? 'opacity 0.35s linear' : 'none';
       const bp = Math.round(progress * 32); const sat = (1 + progress * 0.8).toFixed(2);
       drawer.style.backdropFilter = anim ? 'blur(32px) saturate(1.8)' : 'blur(' + bp + 'px) saturate(' + sat + ')';
       (drawer.style as any).webkitBackdropFilter = drawer.style.backdropFilter;
       drawer.style.transform = 'translateY(' + ((1 - progress) * 100) + '%)';
       stage.style.transform = `scale(${1 - progress * 0.2})`;
       stage.style.borderRadius = `${progress * 12}px`;
-      backdrop.style.opacity = String(progress);
-      backdrop.style.pointerEvents = progress > 0.01 ? 'auto' : 'none';
     };
     const snap = (toOpen: boolean) => {
       open = toOpen;
@@ -142,7 +138,6 @@ export class Renderer {
 
     this.el.querySelectorAll('.cell[data-gid]').forEach(c => c.addEventListener('click', () => this.showGameDetail((c as HTMLElement).dataset.gid!)));
     document.getElementById('cell-import')?.addEventListener('click', () => this.cb.onImportGame());
-    backdrop.addEventListener('pointerdown', () => { if (open) snap(false); });
   }
 
 
