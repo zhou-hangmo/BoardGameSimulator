@@ -9,3 +9,6 @@ assets/design
 assets/fonts
 .vercel
 p1.png
+
+*.zip
+*.txt
