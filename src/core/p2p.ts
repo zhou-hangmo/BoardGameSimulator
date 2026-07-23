@@ -1,6 +1,6 @@
 // P2P Manager — QR-based SDP exchange
 import type { GameAction, PlayerView, ErrorResponse } from './types';
-import { hostCreateOffer, hostAcceptAnswer, guestCreateAnswer, sendJson, type Connection } from './webrtc';
+import { hostCreateOffer, hostAcceptAnswer, guestCreateAnswer, compressSdp, sendJson, type Connection } from './webrtc';
 import { encodeQR, type SignalingData } from './qrcode';
 
 type MsgCb = (fromPeerId: string, data: unknown) => void;
@@ -21,7 +21,7 @@ export class P2PManager {
     this.roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
     const conn = await hostCreateOffer(this.roomCode, (_c, data) => this.handleIncoming('guest', data));
     this.conns.set('_pending', conn);
-    this.hostOfferSdp = JSON.stringify(conn.pc.localDescription!);
+    this.hostOfferSdp = compressSdp(conn.pc.localDescription!.sdp!);
     return this.roomCode;
   }
 
@@ -38,7 +38,7 @@ export class P2PManager {
     // Pre-create next offer for multi-guest
     const next = await hostCreateOffer(this.roomCode, (_c, d) => this.handleIncoming('guest', d));
     this.conns.set('_pending', next);
-    this.hostOfferSdp = JSON.stringify(next.pc.localDescription!);
+    this.hostOfferSdp = compressSdp(next.pc.localDescription!.sdp!);
     return pid;
   }
 
@@ -53,7 +53,7 @@ export class P2PManager {
     this.roomCode = sig.roomCode;
     const conn = await guestCreateAnswer(sig.sdp!, (_c, d) => this.handleIncoming('host', d));
     this.conns.set('host', conn);
-    this.guestAnswerSdp = JSON.stringify(conn.pc.localDescription!);
+    this.guestAnswerSdp = compressSdp(conn.pc.localDescription!.sdp!);
     return this.roomCode;
   }
 
