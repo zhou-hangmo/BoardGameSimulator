@@ -348,9 +348,9 @@ export class Renderer {
         requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
-    } catch {
+    } catch (e) {
       cleanup();
-      this.showToast('无法访问相机，请确认权限');
+      this.showToast('相机失败: ' + ((e as Error).message || '未知错误'));
     }
   }
 
