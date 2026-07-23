@@ -1,10 +1,17 @@
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'child_process';
+
+const COMMIT_COUNT = (() => {
+  try { return execSync('git rev-list --count HEAD', { encoding: 'utf8' }).trim(); }
+  catch { return '0'; }
+})();
 
 export default defineConfig({
   root: '.',
   base: '/BoardGameSimulator/',
+  define: { __COMMIT_COUNT__: JSON.stringify(COMMIT_COUNT) },
   build: {
     outDir: 'docs',
     target: 'es2020',
@@ -20,13 +27,6 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,json,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\.nostr\.*/,
-            handler: 'NetworkFirst',
-            options: { cacheName: 'nostr-cache', expiration: { maxEntries: 10, maxAgeSeconds: 600 } },
-          },
-        ],
       },
       manifest: {
         name: 'BoardGame',

@@ -13,15 +13,19 @@
     "lan": "vite --host"
   },
   "devDependencies": {
+    "@types/pngjs": "^6.0.5",
     "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "jsdom": "^29.1.1",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
     "typescript": "^5.4.0",
     "vite": "^5.4.0",
     "vitest": "^1.6.0"
   },
   "dependencies": {
     "@moku-labs/room": "^0.4.0",
+    "jsqr": "^1.4.0",
     "motion": "^12.42.2",
     "qrcode": "^1.5.4",
     "vite-plugin-pwa": "^1.3.0"

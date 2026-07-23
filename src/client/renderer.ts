@@ -44,7 +44,7 @@ export class Renderer {
   showHomeLibrary(): void {
     this.gameBuilt = false;
     const games = this.cb.installedGames;
-    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:56px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><button id="btn-scan-home" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📷</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer-mask" id="drawer-mask"></div><div class="drawer" id="drawer"><div class="drawer-scroll" id="drawer-scroll"><div class="drawer-import-pill" id="cell-import"><span class="pill-plus">+</span></div>${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div style="height:60px;"></div></div></div>`;
+    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><span id="commit-count" style="position:absolute;top:14px;left:14px;font-size:11px;color:var(--label3);z-index:10;"></span><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:56px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><button id="btn-scan-home" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📷</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer-mask" id="drawer-mask"></div><div class="drawer" id="drawer"><div class="drawer-scroll" id="drawer-scroll"><div class="drawer-import-pill" id="cell-import"><span class="pill-plus">+</span></div>${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div style="height:60px;"></div></div></div>`;
 
     const stage = document.getElementById('main-stage')!;
     const drawer = document.getElementById('drawer')!;
@@ -63,6 +63,8 @@ export class Renderer {
         this.showToast('无法识别'); } catch { this.showToast('文件无效'); }
     });
     document.getElementById('btn-load')?.addEventListener('pointerdown', () => loadInput?.click());
+
+    document.getElementById('commit-count')!.textContent = '#' + (window as any).__COMMIT_COUNT__;
 
     document.getElementById('btn-scan-home')?.addEventListener('click', () => this.startScanner((data) => {
       this.cb.onJoinRoom(JSON.stringify(data));
@@ -272,9 +274,12 @@ export class Renderer {
     overlay.appendChild(btnClose);
 
     const hint = document.createElement('div');
-    hint.textContent = '将二维码对准取景框';
     hint.style.cssText = 'position:absolute;bottom:40px;left:0;right:0;text-align:center;color:#fff;font-size:14px;opacity:.7;';
     overlay.appendChild(hint);
+
+    const debug = document.createElement('div');
+    debug.style.cssText = 'position:absolute;top:60px;left:0;right:0;padding:8px;text-align:center;color:#0f0;font-size:12px;font-family:monospace;z-index:2;pointer-events:none;';
+    overlay.appendChild(debug);
 
     document.body.appendChild(overlay);
 
@@ -293,26 +298,51 @@ export class Renderer {
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d')!;
-      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      let detector: BarcodeDetector | null = null;
+      try { detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch { /* not supported */ }
+      const { default: jsQR } = await import('jsqr');
 
-      const tick = async () => {
+      let frameCount = 0;
+      let lastLogTime = Date.now();
+
+      const decodeFrame = (): string | null => {
+        frameCount++;
+        if (detector) {
+          // BarcodeDetector is async, use sync jsQR as primary
+          try { detector.detect(canvas); } catch { detector = null; }
+        }
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, canvas.width, canvas.height);
+        return code?.data ?? null;
+      };
+
+      const tick = () => {
         if (!this.scannerStream) return;
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
-        try {
-          const barcodes = await detector.detect(canvas);
-          if (barcodes.length > 0) {
-            for (const b of barcodes) {
-              try {
-                const data = JSON.parse(b.rawValue);
-                cleanup();
-                onResult(data);
-                return;
-              } catch { /* not our QR */ }
-            }
+        const raw = decodeFrame();
+        const now = Date.now();
+        if (now - lastLogTime > 500) {
+          const fps = Math.round((frameCount / ((now - lastLogTime) / 1000)));
+          if (raw) {
+            hint.textContent = '✅ 检测到二维码';
+            debug.textContent = `fps:${fps} | 数据:${raw.substring(0, 60)}...`;
+          } else {
+            hint.textContent = '将二维码对准取景框';
+            debug.textContent = `fps:${fps} | video:${canvas.width}x${canvas.height} | jsQR:未检测到`;
           }
-        } catch { /* detection error */ }
+          frameCount = 0;
+          lastLogTime = now;
+        }
+        if (raw) {
+          try {
+            const data = JSON.parse(raw);
+            cleanup();
+            onResult(data);
+            return;
+          } catch { /* not our QR */ }
+        }
         requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
