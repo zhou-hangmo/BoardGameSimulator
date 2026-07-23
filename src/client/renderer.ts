@@ -116,7 +116,7 @@ export class Renderer {
     };
     const onUp = () => {
       if (!dragging) return; dragging = false;
-      snap(progress > 0.20);
+      snap(open ? progress < 0.80 : progress > 0.20);
     };
 
     const dScroll = document.getElementById("drawer-scroll")!;
