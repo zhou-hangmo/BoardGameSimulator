@@ -96,7 +96,7 @@ export class P2PManager {
 
   async shareRoom(): Promise<string> {
     if (!this.room) await this.init();
-    return (this.room as any).shareRoom?.() ?? '';
+    return this.sigRoom?.shareRoom?.() ?? '';
   }
 
   // ========== 消息发送 ==========

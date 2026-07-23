@@ -85,7 +85,7 @@ export function createSignalingRoom(appName: string): SignalingRoom {
 
     async shareRoom(): Promise<string> {
       const data: SignalingData = { roomCode, peerId: myPeerId };
-      await shareSignaling(data);
+      try { await shareSignaling(data); } catch { /* 系统分享不可用 */ }
       return encodeQR(data);
     },
 
