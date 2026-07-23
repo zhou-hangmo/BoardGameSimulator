@@ -44,10 +44,11 @@ export class Renderer {
   showHomeLibrary(): void {
     this.gameBuilt = false;
     const games = this.cb.installedGames;
-    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer" id="drawer"><div class="drawer-import-pill" id="cell-import"><span class="pill-plus">+</span></div><div class="drawer-scroll" id="drawer-scroll">${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div style="height:60px;"></div></div></div>`;
+    this.el.innerHTML = `<div class="main-stage" id="main-stage"><section class="home-sec"><input type="file" id="load-input" accept=".json,image/*" style="display:none"><button id="btn-load" class="btn btn-secondary" style="position:absolute;top:12px;right:12px;font-size:13px;padding:6px 12px;z-index:10;">📂</button><div class="home-logo"><img src="${import.meta.env.BASE_URL}assets/icons/app-logo.svg" alt="logo" /></div><div class="input-wrap" id="wrap"><input class="input-box" id="code-input" maxlength="6" autocomplete="off" inputmode="text" /><div class="input-arrow" id="arrow">${ARROW_SVG}</div></div></section></div><div class="drawer-mask" id="drawer-mask"></div><div class="drawer" id="drawer"><div class="drawer-import-pill" id="cell-import"><span class="pill-plus">+</span></div><div class="drawer-scroll" id="drawer-scroll">${games.map(g => `<div class="cell" data-gid="${g.id}"><div class="cell-icon game">🃏</div><div class="cell-body"><div class="cell-title">${g.name}</div><div class="cell-subtitle">${g.description} · ${g.playerCount}人</div></div></div>`).join('')}<div style="height:60px;"></div></div></div>`;
 
     const stage = document.getElementById('main-stage')!;
     const drawer = document.getElementById('drawer')!;
+    const mask = document.getElementById('drawer-mask')!;
     const homeBtn = document.getElementById('global-home')!;
     const vh = () => window.innerHeight;
 
@@ -92,7 +93,8 @@ export class Renderer {
       drawer.style.backdropFilter = anim ? 'blur(32px) saturate(1.8)' : 'blur(' + bp + 'px) saturate(' + sat + ')';
       (drawer.style as any).webkitBackdropFilter = drawer.style.backdropFilter;
       drawer.style.transform = 'translateY(' + ((1 - progress) * 100) + '%)';
-      drawer.style.setProperty('--drawer-mask', (progress * 0.25).toFixed(2));
+      mask.style.transition = anim ? tr : 'none';
+      mask.style.opacity = progress.toFixed(3);
       stage.style.transform = `scale(${1 - progress * 0.2})`;
       stage.style.filter = 'blur(' + (progress * 8).toFixed(1) + 'px) saturate(' + (1 + progress * 0.3).toFixed(2) + ')';
       stage.style.borderRadius = (progress * 12) + 'px';
