@@ -214,7 +214,7 @@ export class Renderer {
     document.getElementById('btn-create')?.addEventListener('pointerdown', () => this.cb.onCreateRoom(g.id));
   }
   showLobby(code: string, ps: { name: string; isHost: boolean }[], qrImg: string = ''): void {
-    const qrHtml = qrImg ? `<div style="text-align:center;padding:12px 0;"><img src="${qrImg}" style="width:150px;height:150px;border-radius:12px;" /><div style="color:var(--label3);font-size:13px;margin-top:4px;">让好友扫此码加入</div></div>` : '';
+    const qrHtml = qrImg ? `<div style="text-align:center;padding:8px 0;"><img src="${qrImg}" style="width:280px;height:280px;max-width:90vw;border-radius:12px;" /><div style="color:var(--label3);font-size:13px;margin-top:4px;">让好友扫此码加入</div></div>` : '';
     this.renderSecondary('房间大厅', `<div class="sec-body"><div class="room-code"><div class="code">${code}</div><div style="color:var(--label2);margin-top:4px;">分享给好友</div></div>${qrHtml}<div class="section-hdr">玩家 (${ps.length})</div>${ps.map(p=>`<div class="player-row"><span class="dot g"></span>${p.name}${p.isHost?' (主持人)':''}</div>`).join('')}<button id="btn-start" class="btn btn-primary btn-block" style="margin-top:16px;" ${ps.length<2?'disabled':''}>开始游戏</button><button id="btn-share" class="btn btn-secondary btn-block" style="margin-top:8px;">📤 分享房间</button><button id="btn-scan-guest" class="btn btn-secondary btn-block" style="margin-top:4px;">📷 扫访客码</button></div>`);
     document.getElementById('btn-start')?.addEventListener('pointerdown', (e: any) => { if((e.target as HTMLButtonElement).disabled) return; this.cb.onStartGame(); });
     document.getElementById('btn-share')?.addEventListener('pointerdown', () => this.cb.onShareRoom());
@@ -242,7 +242,7 @@ export class Renderer {
   }
 
   showGuestQr(code: string, qrImg: string): void {
-    this.renderSecondary('请主持人扫码', `<div class="sec-body" style="text-align:center;"><div class="room-code"><div class="code">${code}</div></div><img src="${qrImg}" style="width:150px;height:150px;border-radius:12px;" /><div style="color:var(--label3);font-size:13px;margin-top:8px;">请让主持人扫描此码完成连接</div></div>`);
+    this.renderSecondary('请主持人扫码', `<div class="sec-body" style="text-align:center;"><div class="room-code"><div class="code">${code}</div></div><img src="${qrImg}" style="width:280px;height:280px;max-width:90vw;border-radius:12px;" /><div style="color:var(--label3);font-size:13px;margin-top:8px;">请让主持人扫描此码完成连接</div></div>`);
     this.addSwipeBack();
   }
 

@@ -13,7 +13,7 @@ export interface SignalingData {
 /** Encode signaling data to QR code data URL */
 export async function encodeQR(data: SignalingData): Promise<string> {
   const json = JSON.stringify(data);
-  return QRCode.toDataURL(json, { width: 256, margin: 1, errorCorrectionLevel: 'M' });
+  return QRCode.toDataURL(json, { width: 512, margin: 2, errorCorrectionLevel: 'M' });
 }
 
 /** Decode QR from image file using BarcodeDetector API */
