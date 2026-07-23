@@ -10,10 +10,10 @@
 
 | Priority | Total | Pending | Resolved | Deferred | Rejected |
 |----------|-------|---------|----------|----------|----------|
-| 🔴 Critical | 5 | 0 | 5 | 0 | 0 |
+| 🔴 Critical | 7 | 1 | 6 | 0 | 0 |
 | 🟡 Warning | 6 | 0 | 6 | 0 | 0 |
 | 🔵 Suggestion | 4 | 0 | 4 | 0 | 0 |
-| **Total** | **15** | **0** | **0** | **0** | **0** |
+| **Total** | **17** | **1** | **16** | **0** | **0** |
 
 ---
 
@@ -311,3 +311,27 @@
 - **Fix Options**: A: 移动<5px不触发snap，直接return
 - **Chosen Fix**: Option A
 - **Resolution**: 2026-07-23 — Option A applied
+
+### IS-018: snap 方向参数反转导致抽屉开关逻辑错乱
+- **Status**: ✅ Resolved
+- **Priority**: 🔴 Critical
+- **Category**: Logic Bug
+- **File**: src/client/renderer.ts
+- **Line**: 119
+- **Description**: snap(open ? progress < 0.80 : progress > 0.20) 中关闭条件 progress < 0.80 应改为 progress >= 0.80。原逻辑：没动够→关，动够了→开——完全反了。导致极小下滑关、大幅下滑不关、任意上滑也关。
+- **Impact**: 抽屉开关完全不可用。
+- **Fix Options**: A: 改为 >= 0.80
+- **Chosen Fix**: Option A
+- **Resolution**: 2026-07-23 — 改为 snap(open ? progress >= 0.80 : progress > 0.20)
+
+### IS-019: window 事件监听器在 showHomeLibrary 多次调用后重复叠加
+- **Status**: ⏳ Pending
+- **Priority**: 🔴 Critical
+- **Category**: Logic Bug
+- **File**: src/client/renderer.ts
+- **Line**: 132-142
+- **Description**: showHomeLibrary 内 window.addEventListener 从未 remove。首页→二级页→返回首页（showHomeLibrary 再次调用）→ window 上的 touchmove/touchend/mousemove/mouseup 重复绑定。N 次返回后有 N 份 handler 同时运行，drag 状态互相覆盖。
+- **Impact**: 返回首页后抽屉交互异常，状态机错乱。
+- **Fix Options**: (to be filled by code-fixer)
+- **Chosen Fix**: (to be filled by code-fixer)
+- **Resolution**: (to be filled after fix)

@@ -92,6 +92,7 @@ export class Renderer {
       drawer.style.backdropFilter = anim ? 'blur(32px) saturate(1.8)' : 'blur(' + bp + 'px) saturate(' + sat + ')';
       (drawer.style as any).webkitBackdropFilter = drawer.style.backdropFilter;
       drawer.style.transform = 'translateY(' + ((1 - progress) * 100) + '%)';
+      drawer.style.setProperty('--drawer-mask', (progress * 0.25).toFixed(2));
       stage.style.transform = `scale(${1 - progress * 0.2})`;
       stage.style.filter = 'blur(' + (progress * 8).toFixed(1) + 'px) saturate(' + (1 + progress * 0.3).toFixed(2) + ')';
       stage.style.borderRadius = (progress * 12) + 'px';
