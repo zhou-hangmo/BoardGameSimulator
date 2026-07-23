@@ -113,8 +113,8 @@ export function createWebRTCRoom(
   });
 
   return {
-    async createRoom() {
-      roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+    async createRoom(code?: string) {
+      roomCode = code ?? Math.random().toString(36).slice(2, 8).toUpperCase();
       myPeerId = `host-${roomCode}`;
       // Signal ready to accept connections
       signaling.broadcast({ type: 'host_ready', from: myPeerId, payload: { roomCode } });

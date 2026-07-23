@@ -83,7 +83,9 @@ export class P2PManager {
 
   async createRoom(): Promise<string> {
     if (!this.room) await this.init();
-    const { roomCode } = await this.room!.createRoom();
+    const sigResult = await this.sigRoom!.createRoom();
+    const roomCode = sigResult.roomCode;
+    await (this.room!.createRoom as (code?: string) => Promise<{ roomCode: string }>)(roomCode);
     return roomCode;
   }
 
