@@ -21,15 +21,15 @@ export function compressSdp(sdp: string): string {
   const p = sdp.match(/a=ice-pwd:(\S+)/);
   const f = sdp.match(/a=fingerprint:(\S+ \S+)/);
   const s = sdp.match(/a=setup:(\S+)/);
+  const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ \S+ \d+ \S+ \S+ typ \S+)/g)].map(m => m[1]);
   if (!m || !p || !f || !s) throw new Error('SDP missing essential fields');
-  return JSON.stringify({ u: m[1], w: p[1], f: f[1], s: s[1] });
+  return JSON.stringify({ u: m[1], w: p[1], f: f[1], s: s[1], c: candidates });
 }
 
-/** Reconstruct full SDP from compressed fields */
 export function decompressSdp(compressed: string): string {
-  const c = JSON.parse(compressed) as { u: string; w: string; f: string; s: string };
+  const c = JSON.parse(compressed) as { u: string; w: string; f: string; s: string; c: string[] };
   const sid = `${Date.now()} ${Math.random().toString(36).slice(2, 6)}`;
-  return [
+  const lines = [
     'v=0',
     `o=- ${sid} 2 IN IP4 127.0.0.1`,
     's=-',
@@ -43,9 +43,9 @@ export function decompressSdp(compressed: string): string {
     `a=fingerprint:${c.f}`,
     `a=setup:${c.s}`,
     'a=sctp-port:5000',
-    'a=candidate:1 1 UDP 2130706431 ::1 0 typ host',
-    'a=candidate:1 1 UDP 2130706431 127.0.0.1 0 typ host',
-  ].join('\r\n');
+  ];
+  for (const cand of (c.c || [])) lines.push(`a=${cand}`);
+  return lines.join('\r\n');
 }
 
 function setupDC(dc: RTCDataChannel, conn: Connection, onMsg: MsgCb) {
