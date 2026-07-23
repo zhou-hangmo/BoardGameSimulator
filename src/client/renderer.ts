@@ -79,14 +79,17 @@ export class Renderer {
     });
 
     let open = false; let dragging = false; let dragStart = 0; let progress = 0;
-    let drawAnim: ReturnType<typeof animate> | null = null;
+    const tr = 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)';
 
     const isInteractive = (el: any): boolean => {
       while (el) { if (['INPUT','BUTTON','TEXTAREA','SELECT'].includes(el.tagName)) return true; el = el.parentElement; }
       return false;
     };
-    const apply = (p: number) => {
+    const apply = (p: number, anim = false) => {
       progress = Math.max(0, Math.min(1, p));
+      drawer.style.transition = anim ? tr : 'none';
+      stage.style.transition = anim ? tr : 'none';
+      backdrop.style.transition = anim ? 'opacity 0.35s linear' : 'none';
       drawer.style.transform = `translateY(${(1 - progress) * 100}%)`;
       stage.style.transform = `scale(${1 - progress * 0.2})`;
       stage.style.borderRadius = `${progress * 12}px`;
@@ -95,11 +98,7 @@ export class Renderer {
     };
     const snap = (toOpen: boolean) => {
       open = toOpen;
-      drawAnim?.stop();
-      drawAnim = animate({ p: progress }, { p: toOpen ? 1 : 0 }, {
-        onUpdate: (v: any) => apply(v.p),
-        type: 'spring', stiffness: 300, damping: 28,
-      });
+      apply(toOpen ? 1 : 0, true);
       animate(homeBtn, { transform: 'translateX(-50%) scale(0)', opacity: 0 }, { duration: 0.1 });
       setTimeout(() => animate(homeBtn, { transform: 'translateX(-50%) scale(1)', opacity: 1 },
         { type: 'spring', bounce: 0.3, duration: 0.3 }), 200);
