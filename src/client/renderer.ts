@@ -69,10 +69,15 @@ export class Renderer {
     document.getElementById('commit-count')!.textContent = '#' + __COMMIT__;
 
     document.getElementById('btn-scan-home')?.addEventListener('click', () => this.startScanner((data, done) => {
+      if (this.scannerHint) this.scannerHint.textContent = '正在连接...';
       this.cb.onJoinRoom(JSON.stringify(data)).then(() => {
-        done();
+        if (this.scannerHint) this.scannerHint.textContent = '连接成功';
+        setTimeout(done, 500);
       }).catch((e: Error) => {
-        this.showToast('加入失败: ' + (e.message || ''));
+        if (this.scannerHint) {
+          this.scannerHint.textContent = '失败: ' + (e?.message || String(e));
+          setTimeout(() => { if (this.scannerHint) this.scannerHint.textContent = '将二维码对准取景框'; }, 3000);
+        }
       });
     }));
 
@@ -213,10 +218,15 @@ export class Renderer {
     document.getElementById('btn-share')?.addEventListener('pointerdown', () => this.cb.onShareRoom());
     document.getElementById('btn-scan-guest')?.addEventListener('click', () => {
       this.startScanner((data, done) => {
+        if (this.scannerHint) this.scannerHint.textContent = '正在连接...';
         this.cb.onScanGuestQr(JSON.stringify(data)).then(() => {
-          done();
+          if (this.scannerHint) this.scannerHint.textContent = '连接成功';
+          setTimeout(done, 500);
         }).catch((e: Error) => {
-          this.showToast('连接失败: ' + (e.message || ''));
+          if (this.scannerHint) {
+            this.scannerHint.textContent = '失败: ' + (e?.message || String(e));
+            setTimeout(() => { if (this.scannerHint) this.scannerHint.textContent = '将二维码对准取景框'; }, 3000);
+          }
         });
       });
     });
@@ -267,6 +277,7 @@ export class Renderer {
   }
 
   private scannerStream: MediaStream | null = null;
+  private scannerHint: HTMLElement | null = null;
 
   private async startScanner(onResult: (data: unknown, done: () => void) => void): Promise<void> {
     // Create scanner overlay
@@ -286,6 +297,7 @@ export class Renderer {
     const hint = document.createElement('div');
     hint.style.cssText = 'position:absolute;bottom:40px;left:0;right:0;text-align:center;color:#fff;font-size:14px;opacity:.7;';
     overlay.appendChild(hint);
+    this.scannerHint = hint;
 
     const debug = document.createElement('div');
     debug.style.cssText = 'position:absolute;top:60px;left:0;right:0;padding:8px;text-align:center;color:#0f0;font-size:12px;font-family:monospace;z-index:2;pointer-events:none;';
@@ -296,6 +308,7 @@ export class Renderer {
     const cleanup = () => {
       this.scannerStream?.getTracks().forEach(t => t.stop());
       this.scannerStream = null;
+      this.scannerHint = null;
       overlay.remove();
     };
 
