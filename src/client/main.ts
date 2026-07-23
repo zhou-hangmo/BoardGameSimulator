@@ -98,31 +98,25 @@ renderer.init({
 
   onJoinRoom: async (qrData: string) => {
     isHost = false;
-    try {
-      room = await p2p.joinFromOffer(qrData);
-      const answerImg = await p2p.getGuestQrImage();
-      renderer.showGuestQr(room, answerImg);
+    room = await p2p.joinFromOffer(qrData);
+    const answerImg = await p2p.getGuestQrImage();
+    renderer.showGuestQr(room, answerImg);
 
-      p2p.onMessage((_peerId, data) => {
-        const d = data as { type: string; payload: unknown };
-        if (d.type === 'state') {
-          const view = d.payload as PlayerView;
-          myIdx = view.playerIndex;
-          renderer.showGame(view);
-        } else if (d.type === 'error') {
-          renderer.showToast('无效操作');
-        }
-      });
-    } catch {
-      renderer.showToast('加入失败，请检查二维码');
-    }
+    p2p.onMessage((_peerId, data) => {
+      const d = data as { type: string; payload: unknown };
+      if (d.type === 'state') {
+        const view = d.payload as PlayerView;
+        myIdx = view.playerIndex;
+        renderer.showGame(view);
+      } else if (d.type === 'error') {
+        renderer.showToast('无效操作');
+      }
+    });
   },
 
   onScanGuestQr: async (qrData: string) => {
-    try {
-      await p2p.acceptGuestAnswer(qrData);
-      renderer.showToast('玩家已连接');
-    } catch { renderer.showToast('连接失败'); }
+    await p2p.acceptGuestAnswer(qrData);
+    renderer.showToast('玩家已连接');
   },
 
   onPlayAction: (type: string, payload: unknown) => {

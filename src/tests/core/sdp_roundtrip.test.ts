@@ -19,13 +19,15 @@ a=setup:actpass
 a=mid:0
 a=sctp-port:5000
 a=candidate:1 1 UDP 2130706431 192.168.1.5 53126 typ host
-a=candidate:2 1 UDP 2130706431 fe80::1 53126 typ host`;
+a=candidate:2 1 UDP 2130706431 fe80::1 53126 typ host
+a=candidate:3 1 UDP 2130706431 10.0.0.1 53126 typ srflx
+a=candidate:4 1 UDP 2130706431 1.2.3.4 53126 typ relay`;
 
 describe('SDP flat round-trip', () => {
-  it('extract → build → extract 一致', () => {
+    it('extract → build → extract 一致', () => {
     const fields = extractFields(MOCK_SDP);
     expect(fields.u).toBe('abcd');
-    expect(fields.c.length).toBe(2);
+    expect(fields.c.length).toBe(2); // only host, srflx+relay filtered
 
     const sdp = buildSdp(fields);
     const fields2 = extractFields(sdp);

@@ -68,8 +68,8 @@ export class Renderer {
 
     document.getElementById('commit-count')!.textContent = '#' + __COMMIT__;
 
-    document.getElementById('btn-scan-home')?.addEventListener('click', () => this.startScanner((data) => {
-      this.cb.onJoinRoom(JSON.stringify(data));
+    document.getElementById('btn-scan-home')?.addEventListener('click', () => this.startScanner((data, done) => {
+      this.cb.onJoinRoom(JSON.stringify(data)).then(done);
     }));
 
     const input = document.getElementById('code-input') as HTMLInputElement;
@@ -208,8 +208,8 @@ export class Renderer {
     document.getElementById('btn-start')?.addEventListener('pointerdown', (e: any) => { if((e.target as HTMLButtonElement).disabled) return; this.cb.onStartGame(); });
     document.getElementById('btn-share')?.addEventListener('pointerdown', () => this.cb.onShareRoom());
     document.getElementById('btn-scan-guest')?.addEventListener('click', () => {
-      this.startScanner((data) => {
-        this.cb.onScanGuestQr(JSON.stringify(data));
+      this.startScanner((data, done) => {
+        this.cb.onScanGuestQr(JSON.stringify(data)).then(done);
       });
     });
   }
@@ -260,7 +260,7 @@ export class Renderer {
 
   private scannerStream: MediaStream | null = null;
 
-  private async startScanner(onResult: (data: unknown) => void): Promise<void> {
+  private async startScanner(onResult: (data: unknown, done: () => void) => void): Promise<void> {
     // Create scanner overlay
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;display:flex;flex-direction:column;';
@@ -318,8 +318,12 @@ export class Renderer {
         return code?.data ?? null;
       };
 
+      let lastDetected = '';
+      let done = false;
+      const finish = () => { done = true; cleanup(); };
+
       const tick = () => {
-        if (!this.scannerStream) return;
+        if (done || !this.scannerStream) return;
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
@@ -337,12 +341,11 @@ export class Renderer {
           frameCount = 0;
           lastLogTime = now;
         }
-        if (raw) {
+        if (raw && raw !== lastDetected) {
+          lastDetected = raw;
           try {
             const data = JSON.parse(raw);
-            cleanup();
-            onResult(data);
-            return;
+            onResult(data, finish);
           } catch { /* not our QR */ }
         }
         requestAnimationFrame(tick);
