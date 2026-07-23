@@ -17,12 +17,12 @@ type MsgCb = (conn: Connection, data: unknown) => void;
 
 /** Extract essential ICE/fingerprint fields from full SDP */
 export function compressSdp(sdp: string): string {
-  const m = sdp.match(/a=ice-ufrag:[^\r\n]+/);
-  const p = sdp.match(/a=ice-pwd:[^\r\n]+/);
-  const f = sdp.match(/a=fingerprint:\S+ \S+/);
-  const s = sdp.match(/a=setup:\S+/);
+  const m = sdp.match(/a=ice-ufrag:(\S+)/);
+  const p = sdp.match(/a=ice-pwd:(\S+)/);
+  const f = sdp.match(/a=fingerprint:(\S+ \S+)/);
+  const s = sdp.match(/a=setup:(\S+)/);
   if (!m || !p || !f || !s) throw new Error('SDP missing essential fields');
-  return JSON.stringify({u: m[0].split(':')[1], w: p[0].split(':')[1], f: f[0].split(':')[1] + ' ' + f[0].split(' ')[1], s: s[0].split(':')[1]});
+  return JSON.stringify({ u: m[1], w: p[1], f: f[1], s: s[1] });
 }
 
 /** Reconstruct full SDP from compressed fields */
@@ -40,7 +40,7 @@ export function decompressSdp(compressed: string): string {
     'a=mid:0',
     `a=ice-ufrag:${c.u}`,
     `a=ice-pwd:${c.w}`,
-    `a=fingerprint:sha-256 ${c.f.split(' ')[1] || c.f}`,
+    `a=fingerprint:${c.f}`,
     `a=setup:${c.s}`,
     'a=sctp-port:5000',
     'a=candidate:1 1 UDP 2130706431 ::1 0 typ host',
