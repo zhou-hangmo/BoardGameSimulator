@@ -50,16 +50,13 @@ renderer.init({
     input.click();
   },
 
-  // ── HOST: Create Room → QR with SDP offer ──
   onCreateRoom: async (gameId: string) => {
     const g = installedGames.find(x => x.id === gameId);
     if (!g?.config) { renderer.showToast('配置加载中'); return ''; }
     isHost = true; myIdx = 0;
 
-    const { roomCode } = await p2p.createRoom();
-    room = roomCode;
+    room = await p2p.createRoom();
 
-    // Init engine
     const s0: GameState = { version: 0, players: [], deck: [], discard: [], bottomCards: [], landlordIndex: -1, currentTurn: 0, phase: 'idle', lastPlay: null, passCount: 0, winner: null };
     engine = new GameEngine(s0);
     const errs = engine.loadGame(g.config as GameConfig);
@@ -70,10 +67,9 @@ renderer.init({
     }
 
     const players: { name: string; isHost: boolean }[] = [{ name: '你', isHost: true }];
-    const qrImg = await p2p.getQrOfferImage();
+    const qrImg = await p2p.getHostQrImage();
     renderer.showLobby(room, players, qrImg);
 
-    // Host handles actions from connected guests
     p2p.onAction(async (action: GameAction) => {
       if (!engine) return;
       const err = await engine.dispatch(action);
@@ -85,7 +81,6 @@ renderer.init({
       broadcastGame();
     });
 
-    // Host scans guest's QR to complete handshake
     p2p.onPlayerJoin((peerId: string) => {
       const idx = p2p.getPeerIds().indexOf(peerId) + 1;
       players.push({ name: `玩家 ${idx}`, isHost: false });
@@ -95,23 +90,19 @@ renderer.init({
     return room;
   },
 
-  // ── HOST: Start Game ──
   onStartGame: () => {
     if (!engine || !isHost) return;
     engine.startGame();
     broadcastGame();
   },
 
-  // ── GUEST: Scan host QR → create answer QR ──
   onJoinRoom: async (qrData: string) => {
-    isHost = false; myIdx = 0;
+    isHost = false;
     try {
-      await p2p.joinFromOffer(qrData);
-      room = p2p.getRoomCode();
-      const answerImg = await p2p.getQrAnswerImage();
+      room = await p2p.joinFromOffer(qrData);
+      const answerImg = await p2p.getGuestQrImage();
       renderer.showGuestQr(room, answerImg);
 
-      // Guest listens for state updates
       p2p.onMessage((_peerId, data) => {
         const d = data as { type: string; payload: unknown };
         if (d.type === 'state') {
@@ -122,13 +113,11 @@ renderer.init({
           renderer.showToast('无效操作');
         }
       });
-
     } catch {
       renderer.showToast('加入失败，请检查二维码');
     }
   },
 
-  // ── HOST: Scan guest's answer QR ──
   onScanGuestQr: async (qrData: string) => {
     try {
       await p2p.acceptGuestAnswer(qrData);
@@ -136,7 +125,6 @@ renderer.init({
     } catch { renderer.showToast('连接失败'); }
   },
 
-  // ── ANY: Action ──
   onPlayAction: (type: string, payload: unknown) => {
     if (isHost) {
       engine?.dispatch({ type, playerIndex: myIdx, payload, timestamp: Date.now() }).then(() => broadcastGame());
