@@ -15,8 +15,9 @@ export interface SignalingRoom {
   sendTo(peerId: string, data: unknown): void;
   broadcast(data: unknown): void;
   leave(): void;
-  /** Share room for offline joining (QR/system share) */
-  shareRoom(): Promise<string>; // returns QR data URL
+  shareRoom(): Promise<string>;
+  isNostrConnected(): boolean;
+  getNostrStatus(): { connected: number; total: number };
 }
 
 export function createSignalingRoom(appName: string): SignalingRoom {
@@ -86,6 +87,16 @@ export function createSignalingRoom(appName: string): SignalingRoom {
       const data: SignalingData = { roomCode, peerId: myPeerId };
       await shareSignaling(data);
       return encodeQR(data);
+    },
+
+    isNostrConnected(): boolean {
+      return nostr?.isConnected?.() ?? false;
+    },
+    getNostrStatus(): { connected: number; total: number } {
+      return {
+        connected: nostr?.getConnectedCount?.() ?? 0,
+        total: nostr?.getRelayCount?.() ?? 0,
+      };
     },
   };
 }

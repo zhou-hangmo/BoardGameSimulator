@@ -99,14 +99,16 @@ renderer.init({
     if (DEV_MODE) {
       players.push({ name: '玩家 2', isHost: false }, { name: '玩家 3', isHost: false });
     }
-    renderer.showLobby(room, players);
+    const nostrOk = p2p.isNostrConnected();
+    let qrUrl = '';
+    if (!nostrOk) qrUrl = await p2p.shareRoom();
+    renderer.showLobby(room, players, nostrOk, qrUrl);
 
     p2p.onPlayerJoin((peerId: string) => {
       const idx = p2p.getPeerIds().indexOf(peerId) + 1;
       players.push({ name: `玩家 ${idx}`, isHost: false });
-      renderer.showLobby(room, players);
+      renderer.showLobby(room, players, nostrOk, qrUrl);
       p2p.sendRaw(peerId, 'assign', { playerIndex: idx });
-      // Notify all peers of updated player list
       p2p.broadcastRaw('lobby', { players });
     });
 

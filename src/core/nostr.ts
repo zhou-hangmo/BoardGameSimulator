@@ -12,6 +12,9 @@ interface RoomAPI {
   sendTo(peerId: string, data: unknown): void;
   broadcast(data: unknown): void;
   leave(): void;
+  isConnected(): boolean;
+  getConnectedCount(): number;
+  getRelayCount(): number;
 }
 
 export type NostrAPI = RoomAPI;
@@ -54,7 +57,8 @@ export function createNostrRoom(_appName: string): RoomAPI {
   let myPeerId = '';
   let roomCode = '';
   let sockets: WebSocket[] = [];
-  const seen = new Set<string>(); // dedup
+  let relayConnected = false;
+  const seen = new Set<string>();
   let reconnectTimer: ReturnType<typeof setInterval> | null = null;
 
   function connect() {
@@ -64,10 +68,14 @@ export function createNostrRoom(_appName: string): RoomAPI {
       try {
         const ws = new WebSocket(url);
         sockets.push(ws);
+        const shortUrl = url.replace('wss://', '').split('.')[0];
         ws.onopen = () => {
-          // Subscribe to room events
-          ws.send(JSON.stringify(['REQ', tag, { kinds: [1], '#t': [tag] }])); // historical+live events
+          relayConnected = true;
+          console.log(`[Nostr] ✅ ${shortUrl} 已连接`);
+          ws.send(JSON.stringify(['REQ', tag, { kinds: [1], '#t': [tag] }]));
         };
+        ws.onclose = () => console.log(`[Nostr] ${shortUrl} 已断开`);
+        ws.onerror = () => console.warn(`[Nostr] ❌ ${shortUrl} 连接失败`);
         ws.onmessage = (ev: MessageEvent) => {
           const data = JSON.parse(ev.data);
           if (data[0] === 'EVENT' && data[2]?.content) {
@@ -140,5 +148,8 @@ export function createNostrRoom(_appName: string): RoomAPI {
     sendTo(peerId: string, data: unknown) { publish('msg', peerId, data); },
     broadcast(data: unknown) { publish('msg', undefined, data); },
     leave() { publish('leave', undefined, null); disconnect(); },
+    isConnected() { return relayConnected; },
+    getRelayCount() { return RELAYS.length; },
+    getConnectedCount() { return sockets.filter(s => s.readyState === WebSocket.OPEN).length; },
   };
 }

@@ -26,6 +26,7 @@ interface RoomAPI {
 export class P2PManager {
   private forceBC = false;
   private room: RoomAPI | null = null;
+  private sigRoom: import('./signaling').SignalingRoom | null = null;
   private initialized = false;
   private peerIds: string[] = [];
   private onActionCallback: ((action: GameAction) => void) | null = null;
@@ -45,13 +46,11 @@ export class P2PManager {
       try {
         const { createSignalingRoom } = await import('./signaling');
         const sig = createSignalingRoom('boardgame-simulator');
+        this.sigRoom = sig;
         const { createWebRTCRoom } = await import('./webrtc');
-        // WebRTC uses signaling for SDP exchange
         const wrc = createWebRTCRoom(sig as any);
-        // Route signaling messages to WebRTC internal handler (SDP/ICE)
-        // then to normal message handlers (game data)
         this.room = wrc as unknown as RoomAPI;
-        this.room.leave = this.forceBC ? this.room.leave : () => { wrc.leave(); sig.leave(); }; // IS-006: only override for WebRTC path
+        this.room.leave = () => { wrc.leave(); sig.leave(); };
         console.log('[P2P] WebRTC + Nostr/QR');
       } catch {
         console.warn('[P2P] 回退 BroadcastChannel');
@@ -148,6 +147,14 @@ export class P2PManager {
 
   getPeerIds(): string[] {
     return [...this.peerIds];
+  }
+
+  isNostrConnected(): boolean {
+    return this.sigRoom?.isNostrConnected?.() ?? false;
+  }
+
+  getNostrStatus(): { connected: number; total: number } {
+    return this.sigRoom?.getNostrStatus?.() ?? { connected: 0, total: 0 };
   }
 
   leave(): void {
