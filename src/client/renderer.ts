@@ -194,7 +194,7 @@ export class Renderer {
   // ========== SECONDARY SCREENS ==========
   private renderSecondary(title: string, body: string): void {
     this.gameBuilt = false;
-    this.el.innerHTML = `<div class="nav-bar"><span class="nav-title">${title}</span></div><div class="scroll">${body}</div>`;
+    this.el.innerHTML = `<div style="display:flex;flex-direction:column;height:100%"><div class="nav-bar"><span class="nav-title">${title}</span></div><div class="scroll" style="flex:1;min-height:0">${body}</div></div>`;
     this.addSwipeBack();
   }
 
