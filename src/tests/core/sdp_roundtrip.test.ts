@@ -18,6 +18,7 @@ a=fingerprint:sha-256 AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:D
 a=setup:actpass
 a=mid:0
 a=sctp-port:5000
+a=sctp-port:5000
 a=candidate:1 1 UDP 2130706431 192.168.1.5 53126 typ host
 a=candidate:2 1 UDP 2130706431 fe80::1 53126 typ host
 a=candidate:3 1 UDP 2130706431 10.0.0.1 53126 typ srflx

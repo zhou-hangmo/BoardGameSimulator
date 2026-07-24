@@ -15,23 +15,24 @@ export interface Connection {
 
 type MsgCb = (conn: Connection, data: unknown) => void;
 
-export interface SdpFields { u: string; w: string; f: string; s: string; c: string[] }
+export interface SdpFields { u: string; w: string; f: string; s: string; p: string; c: string[] }
 
 export function extractFields(sdp: string): SdpFields {
   const m = sdp.match(/a=ice-ufrag:(\S+)/);
-  const p = sdp.match(/a=ice-pwd:(\S+)/);
+  const pw = sdp.match(/a=ice-pwd:(\S+)/);
   const f = sdp.match(/a=fingerprint:(\S+ \S+)/);
   const s = sdp.match(/a=setup:(\S+)/);
+  const sp = sdp.match(/a=sctp-port:(\d+)/);
   const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ UDP \d+ \S+ \S+ typ host)/g)].map(m => m[1]);
-  if (!m || !p || !f || !s) throw new Error('SDP missing essential fields');
-  return { u: m[1], w: p[1], f: f[1], s: s[1], c: candidates };
+  if (!m || !pw || !f || !s) throw new Error('SDP missing essential fields');
+  return { u: m[1], w: pw[1], f: f[1], s: s[1], p: sp?.[1] ?? '5000', c: candidates };
 }
 
 export function buildSdp(f: SdpFields): string {
   const sid = `${Date.now()}${Math.floor(Math.random()*1e9)}`;
   const lines = ['v=0', `o=- ${sid} 2 IN IP4 127.0.0.1`, 's=-', 't=0 0', 'a=group:BUNDLE 0',
     'm=application 9 UDP/DTLS/SCTP webrtc-datachannel', 'c=IN IP4 0.0.0.0', 'a=mid:0',
-    `a=ice-ufrag:${f.u}`, `a=ice-pwd:${f.w}`, `a=fingerprint:${f.f}`, `a=setup:${f.s}`, 'a=sctp-port:5000'];
+    `a=ice-ufrag:${f.u}`, `a=ice-pwd:${f.w}`, `a=fingerprint:${f.f}`, `a=setup:${f.s}`, `a=sctp-port:${f.p}`];
   for (const cand of f.c) lines.push(`a=${cand}`);
   return lines.join('\r\n');
 }
