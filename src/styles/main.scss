@@ -1,0 +1,22 @@
+// ============================================================
+// BoardGameSimulator — 样式入口文件
+// ============================================================
+@use 'tokens' as *;
+@use 'base';
+@use 'drawer';
+@use 'home';
+@use 'game';
+
+// ---------- CSS 自定义属性 ----------
+:root {
+  @each $key, $val in $colors {
+    --color-#{$key}: #{$val};
+  }
+
+  --font: #{map.get($fonts, system)};
+  --font-mono: #{map.get($fonts, mono)};
+
+  --radius: 10px;
+  --nav-h: 44px;
+  --safe: env(safe-area-inset-bottom, 0px);
+}

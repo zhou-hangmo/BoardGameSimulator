@@ -1,0 +1,118 @@
+// ============================================================
+// BoardGameSimulator — Design Tokens
+// ============================================================
+@use 'sass:map';
+
+// ---------- 颜色 ----------
+$colors: (
+  bg:      #ffffff,
+  bg2:     #f2f2f7,
+  'bg-card': #ffffff,
+  label:   #000000,
+  label2:  rgba(60, 60, 67, 0.60),
+  label3:  rgba(60, 60, 67, 0.30),
+  fill:    rgba(120, 120, 120, 0.20),
+  fill2:   rgba(120, 120, 128, 0.16),
+  fill3:   rgba(118, 118, 128, 0.12),
+  'blue':  #0088ff,
+  'red':   #ff383c,
+  'green': #34c759,
+  sep:     rgba(60, 60, 67, 0.29),
+);
+
+// ---------- 排版 ----------
+$fonts: (
+  system: (-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif),
+  mono:   ('SF Mono', 'Fira Code', 'Consolas', monospace),
+);
+
+$font-sizes: (
+  xs:    11px,
+  sm:    13px,
+  base:  17px,
+  lg:    20px,
+  xl:    28px,
+  xxl:   32px,
+);
+
+$font-weights: (
+  regular: 400,
+  medium:  500,
+  bold:    700,
+);
+
+// ---------- 间距 ----------
+$spacing: (
+  xs:  4px,
+  sm:  8px,
+  md:  16px,
+  lg:  24px,
+  xl:  32px,
+);
+
+// ---------- 圆角 ----------
+$radius: (
+  sm:   6px,
+  md:   10px,
+  lg:   12px,
+  pill: 999px,
+  round: 50%,
+);
+
+// ---------- 断点 ----------
+$breakpoints: (
+  desktop: 401px,
+);
+
+// ---------- 缓动 ----------
+$ease: (
+  out:     cubic-bezier(0.25, 0.46, 0.45, 0.94),
+  in-out:  cubic-bezier(0.42, 0, 0.58, 1),
+  spring:  cubic-bezier(0.23, 1, 0.32, 1),
+);
+
+// ---------- 函数 ----------
+@function color($key, $alpha: 1) {
+  $c: map.get($colors, $key);
+  @if $c == null {
+    $c: map.get($colors, '' + $key);
+  }
+  @if $alpha != 1 {
+    @return rgba($c, $alpha);
+  }
+  @return var(--color-#{$key}, #{$c});
+}
+
+@function font-size($key) {
+  @return map.get($font-sizes, $key);
+}
+
+@function font-weight($key) {
+  @return map.get($font-weights, $key);
+}
+
+@function spacing($key) {
+  @return map.get($spacing, $key);
+}
+
+@function radius($key) {
+  @return map.get($radius, $key);
+}
+
+@function ease($key) {
+  @return map.get($ease, $key);
+}
+
+// ---------- Mixins ----------
+@mixin mq($bp) {
+  @media (min-width: map.get($breakpoints, $bp)) {
+    @content;
+  }
+}
+
+@mixin flex($dir: row, $align: stretch, $justify: flex-start) {
+  display: flex;
+  flex-direction: $dir;
+  align-items: $align;
+  justify-content: $justify;
+}

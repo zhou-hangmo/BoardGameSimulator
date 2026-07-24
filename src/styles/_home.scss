@@ -1,0 +1,93 @@
+// ============================================================
+// BoardGameSimulator — 首页样式
+// ============================================================
+@use 'tokens' as *;
+
+.scroll-host {
+  width: 100%;
+  overflow: hidden;
+  will-change: transform;
+  contain: layout style;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.home-sec {
+  min-height: 100vh;
+  @include flex(column, center, center);
+  position: relative;
+}
+
+.home-logo {
+  position: absolute;
+  top: calc(50% - 80px);
+  transform: translateY(-50%);
+  width: 81px;
+  height: 81px;
+  opacity: .85;
+
+  img {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.input-wrap {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 320px;
+  height: 44px;
+}
+
+.input-arrow {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  @include flex(row, center, center);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms;
+
+  &.on {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  svg {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+.lib-sec {
+  padding-bottom: 40px;
+  min-height: 100vh;
+}
+
+.float-home {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: radius(round);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, .08);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, .12);
+  @include flex(row, center, center);
+  cursor: pointer;
+  z-index: 9999;
+  transition: transform 120ms, opacity 120ms;
+
+  &:active {
+    transform: scale(.92);
+    opacity: .8;
+  }
+}

@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BoardGameSimulator · 对照 AW-2025-Portfolio 的优化方案</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --text: #1a1a2e;
+    --accent: #0088ff;
+    --accent2: #ff383c;
+    --green: #34c759;
+    --card-bg: #ffffff;
+    --border: #e0e0e0;
+    --code-bg: #f6f8fa;
+    --shadow: rgba(0,0,0,0.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.75;
+  }
+  .site-wrap { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: 0.25rem; }
+  h1 .sub { display: block; font-size: 0.95rem; font-weight: 400; margin-top: 0.3rem; opacity: 0.6; }
+  h2 {
+    font-size: 1.55rem; font-weight: 700; margin: 2.8rem 0 1rem;
+    padding-bottom: 0.4rem; border-bottom: 3px solid var(--accent);
+  }
+  h3 { font-size: 1.2rem; font-weight: 700; margin: 1.8rem 0 0.5rem; color: var(--accent); }
+  h4 { font-size: 1rem; font-weight: 700; margin: 1.2rem 0 0.3rem; }
+  p { margin: 0.5rem 0; font-size: 0.93rem; }
+  ul, ol { margin: 0.4rem 0 0.4rem 1.5rem; font-size: 0.93rem; }
+  li { margin: 0.2rem 0; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.4em; border-radius: 3px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 0.86em;
+  }
+  pre {
+    background: #1a1a2e; color: #e8e8e8; padding: 1rem 1.2rem; border-radius: 8px;
+    overflow-x: auto; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.8rem; line-height: 1.5; margin: 0.8rem 0;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+  th { background: var(--card-bg); font-weight: 700; font-size: 0.85rem; }
+  .card {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.2rem 1.5rem; margin: 1rem 0; box-shadow: 0 2px 8px var(--shadow);
+  }
+  .tag {
+    display: inline-block; padding: 0.15em 0.55em; border-radius: 4px;
+    font-size: 0.75rem; font-weight: 600; margin-right: 0.3rem; margin-bottom: 0.2rem;
+  }
+  .tag.good { background: #e8f5e9; color: #2e7d32; }
+  .tag.warn { background: #fff3e0; color: #e65100; }
+  .tag.info { background: #e3f2fd; color: var(--accent); }
+  .tag.danger { background: #fce4ec; color: #c62828; }
+  .badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.6em; height: 1.6em; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: 0.8rem; font-weight: 700;
+    margin-right: 0.4em; flex-shrink: 0;
+  }
+  .badge.g { background: var(--green); }
+  .badge.r { background: var(--accent2); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  .toc { background: var(--card-bg); border-radius: 10px; padding: 1.5rem; border: 1px solid var(--border); margin: 1.5rem 0 2rem; }
+  .filepath { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem; color: #888; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+  @media (max-width: 680px) { .compare { grid-template-columns: 1fr; } }
+  .compare > div { border-radius: 8px; padding: 1rem; }
+  .compare .left { background: #fce4ec; border: 1px solid #ef9a9a; }
+  .compare .right { background: #e8f5e9; border: 1px solid #a5d6a7; }
+  .compare h5 { margin: 0 0 0.5rem; font-size: 0.9rem; }
+  .score { font-size: 2rem; font-weight: 800; }
+  .progress-bar {
+    height: 8px; border-radius: 4px; background: #e0e0e0; margin: 0.3rem 0;
+    overflow: hidden;
+  }
+  .progress-bar .fill { height: 100%; border-radius: 4px; }
+  .tip {
+    background: #e3f2fd; border: 1px solid #90caf9; border-left: 4px solid var(--accent);
+    padding: 0.7rem 1.1rem; border-radius: 6px; margin: 1rem 0; font-size: 0.9rem;
+  }
+  .warning {
+    background: #fff3e0; border: 1px solid #ffcc02; border-left: 4px solid #ff9800;
+    padding: 0.7rem 1.1rem; border-radius: 6px; margin: 1rem 0; font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+<div class="site-wrap">
+
+<h1>BoardGameSimulator <span class="sub">对照 AW-2025-Portfolio 的代码风格与架构优化方案</span></h1>
+
+<p style="opacity:0.7">
+  参考项目：<strong>AW-2025-Portfolio</strong>（2025 Webby 最佳首页奖）&nbsp;|&nbsp; 分析项目：<strong>BoardGameSimulator</strong>（去中心化桌游模拟器）
+</p>
+
+<div class="toc" style="columns:2; column-gap:1.5rem;">
+<h4 style="column-span:all;margin-top:0;">📑 目录</h4>
+<ol style="break-inside:avoid;">
+  <li><a href="#s1">项目定位对比</a></li>
+  <li><a href="#s2">CSS 设计系统差距</a></li>
+  <li><a href="#s3">组件化与代码隔离</a></li>
+  <li><a href="#s4">事件驱动架构提升</a></li>
+  <li><a href="#s5">动画系统升级</a></li>
+  <li><a href="#s6">性能优化模式</a></li>
+  <li><a href="#s7">造型代码风格对比</a></li>
+  <li><a href="#s8">类型安全与防御性编程</a></li>
+  <li><a href="#s9">构建配置与工程化</a></li>
+  <li><a href="#s10">整体架构改进方向</a></li>
+  <li><a href="#s11">BoardGameSimulator 已做的好</a></li>
+  <li><a href="#s12">优先级路线图</a></li>
+</ol>
+</div>
+
+<!-- ================ SECTION 1 ================ -->
+<h2 id="s1"><span class="badge">1</span> 项目定位对比</h2>
+
+<div class="compare">
+  <div class="left">
+    <h5>🔴 BoardGameSimulator（当前）</h5>
+    <ul>
+      <li>Vite + TypeScript，无 UI 框架</li>
+      <li>单文件 Renderer（417 行 innerHTML）</li>
+      <li>单文件 CSS（124 行，无工程化组织）</li>
+      <li>主逻辑在 main.ts 中平铺</li>
+      <li>raw DOM 操作为主</li>
+    </ul>
+  </div>
+  <div class="right">
+    <h5>🟢 AW-2025-Portfolio（参考）</h5>
+    <ul>
+      <li>Astro 框架，组件化开发</li>
+      <li>11 个独立 .astro 组件</li>
+      <li>15 个 SCSS 文件，分层设计系统</li>
+      <li>Emitter 事件总线解耦组件通信</li>
+      <li>Web Component 封装可复用元素</li>
+    </ul>
+  </div>
+</div>
+
+<hr>
+
+<!-- ================ SECTION 2 ================ -->
+<h2 id="s2"><span class="badge">2</span> CSS 设计系统差距 <span class="tag danger">高优先</span></h2>
+
+<h3>2.1 当前问题</h3>
+
+<div class="card">
+  <h4>BoardGameSimulator 的 styles.css 现状：</h4>
+  <ul>
+    <li>124 行，所有样式堆在一个文件里</li>
+    <li>选择器全部是全局的（<code>.card-hand</code>、<code>.btn</code>），<strong>无命名空间隔离</strong></li>
+    <li>颜色值直接写死在 CSS 中，无主题切换能力</li>
+    <li>无 SCSS — 没有 mixin、function、变量继承</li>
+    <li>硬编码的数值散落各处（<code>width:46px</code>、<code>font-size:13px</code>）</li>
+  </ul>
+</div>
+
+<h3>2.2 参考 AW-2025-Portfolio 的 SCSS 架构</h3>
+
+<table>
+  <tr><th>层</th><th>AW 的做法</th><th>给 BGS 的建设</th></tr>
+  <tr>
+    <td>变量层</td>
+    <td><code>variables-scss/_colors.scss</code> 定义 $theme-colors map（两组主题）</td>
+    <td>把现有 CSS 变量提取到 <code>src/styles/_tokens.scss</code>，定义完整 token 体系</td>
+  </tr>
+  <tr>
+    <td>CSS 变量生成</td>
+    <td><code>variables-css/_colors.scss</code> 编译生成 <code>:root { --color-primary: ... }</code></td>
+    <td>已有 <code>:root</code>（8 个变量），这是好的开始，应扩展为 token 体系</td>
+  </tr>
+  <tr>
+    <td>Helper 函数</td>
+    <td><code>color(key)</code> 返回 <code>var(--color-xxx)</code>；<code>ease(key)</code> 返回 cubic-bezier；<code>t(key)</code> 一键排版</td>
+    <td>引入 SCSS，创建 <code>color()</code>、<code>spacing()</code>、<code>font()</code> 等函数</td>
+  </tr>
+  <tr>
+    <td>响应式</td>
+    <td><code>mq($bp)</code> mixin 统一断点管理</td>
+    <td>把 <code>@media(min-width:401px)</code> 替换为 <code>@include mq(desktop)</code></td>
+  </tr>
+  <tr>
+    <td>弹性布局</td>
+    <td><code>flex(row, center, space-between)</code> 封装 flex 写法</td>
+    <td>创建 <code>@mixin flex($dir, $align, $justify)</code> 减少样板</td>
+  </tr>
+</table>
+
+<h3>2.3 具体建议：引入 SCSS 设计系统</h3>
+
+<pre>
+// 新建 src/styles/_tokens.scss
+$colors: (
+  bg:      #ffffff,
+  bg2:     #f2f2f7,
+  label:   #000000,
+  blue:    #0088ff,
+  red:     #ff383c,
+  green:   #34c759,
+);
+
+$ease: (
+  out:    cubic-bezier(0.25, 0.46, 0.45, 0.94),
+  in-out: cubic-bezier(0.42, 0, 0.58, 1),
+);
+
+$breakpoints: (
+  desktop: 401px,
+);
+
+// 新建 src/styles/_mixins.scss
+@mixin flex($dir: row, $align: stretch, $justify: flex-start) {
+  display: flex;
+  flex-direction: $dir;
+  align-items: $align;
+  justify-content: $justify;
+}
+
+@mixin mq($bp) {
+  @media (min-width: map.get($breakpoints, $bp)) { @content; }
+}
+</pre>
+
+<div class="tip">
+  <strong>收益：</strong>引入 SCSS 后，所有颜色、间距、字号都有单一来源（single source of truth）。未来要加暗色主题，只需要在 tokens 层加一组配置，无需改任何组件代码。
+</div>
+
+<hr>
+
+<!-- ================ SECTION 3 ================ -->
+<h2 id="s3"><span class="badge">3</span> 组件化与代码隔离 <span class="tag danger">高优先</span></h2>
+
+<h3>3.1 当前问题：renderer.ts 是巨型 God Object</h3>
+
+<div class="compare">
+  <div class="left">
+    <h5>🔴 renderer.ts（417行）做了太多事</h5>
+    <ul>
+      <li>showHomeLibrary() — 首页 + 抽屉 + 输入框 + 扫描按钮</li>
+      <li>showLobby() — 房间大厅 + 分享按钮 + 开始游戏</li>
+      <li>showGame() — 游戏主界面 + 手牌 + 操作栏</li>
+      <li>showGuestQr() — 客人 QR 展示</li>
+      <li>startScanner() — 摄像头扫描</li>
+      <li>showToast() — 全局提示</li>
+      <li><strong>全部用 innerHTML 拼字符串</strong></li>
+    </ul>
+  </div>
+  <div class="right">
+    <h5>🟢 AW 的做法：每个功能一个组件</h5>
+    <ul>
+      <li>ASeparator.astro — 只做分隔条</li>
+      <li>AWaves.astro — 只做波浪动画</li>
+      <li>SHero.astro — 只做首屏</li>
+      <li>SiteHead.astro — 只做导航</li>
+      <li>每个组件有独立的 template + script + style</li>
+      <li><strong>template 是声明式的 HTML</strong></li>
+    </ul>
+  </div>
+</div>
+
+<h3>3.2 具体建议：拆分 renderer.ts</h3>
+
+<table>
+  <tr><th>拆分方案</th><th>新文件</th><th>职责</th></tr>
+  <tr><td rowspan="6" style="vertical-align:top">从 renderer.ts 拆分出 6 个视图组件</td>
+    <td><code>src/views/HomeView.ts</code></td><td>首页 + 游戏列表抽屉</td>
+  </tr>
+  <tr><td><code>src/views/LobbyView.ts</code></td><td>房间大厅（创建/加入后）</td></tr>
+  <tr><td><code>src/views/GameView.ts</code></td><td>游戏主界面（手牌、操作、出牌区）</td></tr>
+  <tr><td><code>src/views/GuestQRView.ts</code></td><td>客人扫码界面</td></tr>
+  <tr><td><code>src/views/ScannerView.ts</code></td><td>摄像头扫描组件</td></tr>
+  <tr><td><code>src/views/ToastView.ts</code></td><td>全局 Toast 通知</td></tr>
+</table>
+
+<h3>3.3 Web Component 模式</h3>
+
+<div class="card">
+  <h4>参考 AW 中的 <code>&lt;a-work&gt;</code> 自定义元素：</h4>
+  <pre>
+// 推荐：BoardGameSimulator 中的核心 UI 元素可以用 Web Component 封装
+class GameCard extends HTMLElement {
+  static observedAttributes = ['suit', 'rank', 'selected'];
+
+  connectedCallback() { this.render(); }
+  attributeChangedCallback(name, _, val) {
+    if (name === 'selected') this.classList.toggle('is-selected', val === 'true');
+  }
+  render() {
+    this.innerHTML = `&lt;span class="card-face"&gt;${this.getAttribute('name')}&lt;/span&gt;`;
+  }
+}
+customElements.define('game-card', GameCard);
+// 使用: &lt;game-card suit="heart" rank="A" name="♥A"&gt;&lt;/game-card&gt;
+</pre>
+  <p>这样做的好处：</p>
+  <ul>
+    <li>每张牌的状态自成一体，不依赖全局选择器</li>
+    <li>selected 状态通过 <code>observedAttributes</code> 触发 CSS class 切换，逻辑内聚</li>
+    <li>可以单独测试 <code>GameCard</code> 组件</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ================ SECTION 4 ================ -->
+<h2 id="s4"><span class="badge">4</span> 事件驱动架构提升 <span class="tag warn">中优先</span></h2>
+
+<h3>4.1 当前问题：回调地狱</h3>
+
+<pre>
+// main.ts 当前的通信方式：renderer 通过回调向 main 报告事件
+renderer.init({
+  onImportGame: async () => { ... },
+  onCreateRoom: async (gameId) => { ... },
+  onJoinRoom:    async (qrData) => { ... },
+  onStartGame:   () => { ... },
+  onPlayAction:  (type, payload) => { ... },
+  onLeaveRoom:   () => { ... },
+  // ... 共 12 个回调，全部定义在 init() 的一个对象参数里
+});
+</pre>
+
+<p>这种模式的本质问题：<strong>main.ts 成了上帝文件</strong>，所有逻辑都要在这里定义。新增一个界面行为，就要在 init 对象里加一个回调，main.ts 会不断膨胀。</p>
+
+<h3>4.2 参考 AW 的 Emitter 事件总线</h3>
+
+<pre>
+// AW-2025-Portfolio 的做法：全局事件总线，完全解耦
+import Emitter from '../utils/Emitter';
+
+// 任何组件都可以随时发布事件
+Emitter.emit('tick', time);
+Emitter.emit('resize', widthChanged, heightChanged);
+Emitter.emit('mousemove', clientX, clientY);
+
+// 任何组件都可以随时订阅事件（自主决定何时绑定/解绑）
+Emitter.on('tick', this.tick, this);
+Emitter.on('resize', this.onResize, this);
+Emitter.off('tick', this.tick, this);  // 组件销毁时解绑
+</pre>
+
+<h3>4.3 给 BGS 的事件总线方案</h3>
+
+<pre>
+// 新建 src/utils/EventBus.ts
+class EventBus {
+  #events = new Map();
+
+  on(name: string, fn: (...args: any[]) => void, ctx?: any) {
+    if (!this.#events.has(name)) this.#events.set(name, []);
+    this.#events.get(name)!.push({ fn, ctx });
+  }
+
+  off(name: string, fn: (...args: any[]) => void) {
+    const list = this.#events.get(name);
+    if (list) this.#events.set(name, list.filter(e => e.fn !== fn));
+  }
+
+  emit(name: string, ...args: any[]) {
+    this.#events.get(name)?.forEach(e => e.fn.apply(e.ctx, args));
+  }
+}
+
+export const bus = new EventBus();
+</pre>
+
+<p>改用事件总线后：</p>
+<ul>
+  <li><code>renderer</code> 只需要 <code>bus.emit('ui:play-cards', cards)</code></li>
+  <li><code>engine</code> 只需要 <code>bus.on('ui:play-cards', handlePlay)</code></li>
+  <li>两者完全不知道对方的存在，由总线中介</li>
+  <li>新增功能只需订阅新事件，不需要改已有代码</li>
+</ul>
+
+<hr>
+
+<!-- ================ SECTION 5 ================ -->
+<h2 id="s5"><span class="badge">5</span> 动画系统升级 <span class="tag warn">中优先</span></h2>
+
+<h3>5.1 当前状态</h3>
+
+<p>BoardGameSimulator 使用 <code>motion</code> 库（12.42.2 版本，100KB+）但只用于非常基础的过渡动画。当前动画效果：卡片选中时 <code>transform: translateY(-12px)</code>，按钮按下缩放 0.97。</p>
+
+<h3>5.2 AW 的动画体系对比</h3>
+
+<table>
+  <tr><th>动画能力</th><th>AW-2025-Portfolio</th><th>BGS 当前</th></tr>
+  <tr><td>入场动画</td><td>GSAP Timeline，多阶段协调</td><td>无系统性入场动画</td></tr>
+  <tr><td>滚动驱动</td><td>ScrollTrigger，随滚动进度变化</td><td>不适用（无滚动）</td></tr>
+  <tr><td>逐帧动画</td><td>Ticker + requestAnimationFrame</td><td>无（但扫描器用 RAF 跑检测）</td></tr>
+  <tr><td>缓动函数</td><td>28 种 cubic-bezier，统一管理</td><td><code>cubic-bezier(.25,.1,.25,1)</code> 硬编码</td></tr>
+  <tr><td>过渡动画</td><td>CSS transition + GSAP</td><td>CSS transition（仅几处）</td></tr>
+</table>
+
+<h3>5.3 建议：提升棋牌类动画体验</h3>
+
+<div class="card">
+  <h4>桌游场景下的动画增强方向：</h4>
+  <ol>
+    <li><strong>发牌动画</strong>：牌从牌堆"飞"到每个玩家手中。用 GSAP stagger 可以轻松做到 54 张牌依次飞出</li>
+    <li><strong>出牌动画</strong>：打出的牌从手牌位平滑移动到桌面中央，带微小的旋转 shake</li>
+    <li><strong>叫地主动画</strong>：底牌翻转亮牌效果（<code>rotateY</code> + <code>backface-visibility</code>）</li>
+    <li><strong>炸弹特效</strong>：打出炸弹时全屏震动 + 粒子爆炸（Canvas）</li>
+    <li><strong>胜利动画</strong>：获胜时手牌飞出散落，金色粒子上升</li>
+    <li><strong>页面切换</strong>：首页→房间→游戏的过渡应加入 smooth page transition</li>
+  </ol>
+</div>
+
+<div class="tip">
+  <strong>考虑替换 motion 为 GSAP：</strong>motion 库 100KB+ 但只用到了 <code>animate()</code> 函数。GSAP 的 gsap core 只有 ~30KB，且提供更丰富的动画控制（Timeline、stagger、yoyo、repeat）。如果未来要加复杂动画，GSAP 是更优选择。不过 motion 也可保留——两个库关注点不同。
+</div>
+
+<hr>
+
+<!-- ================ SECTION 6 ================ -->
+<h2 id="s6"><span class="badge">6</span> 性能优化模式 <span class="tag info">中优先</span></h2>
+
+<h3>6.1 AW 中的三个核心优化模式</h3>
+
+<table>
+  <tr><th>优化模式</th><th>AW 实现</th><th>BGS 可借鉴点</th></tr>
+  <tr>
+    <td><strong>1. IntersectionObserver + tick 暂停</strong></td>
+    <td>所有动画组件在离开视口时取消 tick 订阅，完全停止运算</td>
+    <td>扫描器（startScanner）在用户离开页面或切换到后台时应该暂停 RAF 循环</td>
+  </tr>
+  <tr>
+    <td><strong>2. will-change 提示 GPU 层</strong></td>
+    <td>每个动画元素的 CSS 都声明 <code>will-change: transform</code></td>
+    <td>给 drawer、main-stage、card-hand.sel 添加 <code>will-change</code> 提示</td>
+  </tr>
+  <tr>
+    <td><strong>3. content-visibility 延迟渲染</strong></td>
+    <td>AWork 组件用 <code>content-visibility: hidden</code> 阻止离屏视频渲染</td>
+    <td>抽屉中的游戏列表如果超过 20 个，可用此属性延迟渲染不可见项</td>
+  </tr>
+</table>
+
+<h3>6.2 扫描器性能优化</h3>
+
+<pre>
+// 当前 startScanner() 用 RAF 每帧跑 jsQR
+// 优化：加入空闲检测
+let lastDetect = 0;
+function detectLoop() {
+  const now = Date.now();
+  if (now - lastDetect < 200) { rAF = requestAnimationFrame(detectLoop); return } // 降频到 5fps
+  lastDetect = now;
+  // ... jsQR 检测逻辑
+}
+</pre>
+
+<hr>
+
+<!-- ================ SECTION 7 ================ -->
+<h2 id="s7"><span class="badge">7</span> 代码风格对比 <span class="tag info">代码细节</span></h2>
+
+<h3>7.1 组件/类的结构一致性</h3>
+
+<div class="compare">
+  <div class="left">
+    <h5>🔴 BoardGameSimulator</h5>
+    <pre>// Engine.ts — 方法散落，生命周期不统一
+class GameEngine {
+  constructor(s) { ... }
+  loadGame(c) { ... }       // 公开
+  private validateConfig()  // 私有
+  private initWorker()      // 私有
+  private callWorker()      // 私有
+  getState()                // 公开
+  async dispatch()          // 公开
+  buildPlayerView()         // 公开
+  startGame()               // 公开
+  destroy()                 // 公开
+}</pre>
+  </div>
+  <div class="right">
+    <h5>🟢 AW-2025-Portfolio（每个组件的标准结构）</h5>
+    <pre>// 所有组件遵循同一模式
+class Section {
+  constructor() {
+    // 1. 获取 DOM 元素
+    // 2. 初始化属性默认值
+    // 3. 调用 init() 或绑定事件
+  }
+  init() { ... }               // 统一初始化
+  bindEvents() { ... }         // 统一事件绑定
+  onResize() { ... }           // resize→setSize
+  onIntersect(e) { ... }       // 可见性→暂停/恢复
+  setSize() { ... }            // 重新计算布局
+  // ... 业务方法
+  tick(time) { ... }           // 每帧更新
+  destroy() { ... }            // 清理
+}</pre>
+  </div>
+</div>
+
+<div class="tip">
+  <strong>BGS 应统一类结构：</strong>每个类（Renderer、GameEngine、P2PManager等）遵循 <code>constructor → init → bindEvents → 业务方法 → destroy</code> 的固定生命周期。新手一看就知道组件是如何初始化和卸载的。
+</div>
+
+<h3>7.2 innerHTML 字符串拼接 vs 声明式模板</h3>
+
+<pre>
+// BGS renderer.ts 当前：用 innerHTML 拼 60 行字符串
+this.el.innerHTML = `&lt;div class="main-stage"&gt;
+  &lt;section class="home-sec"&gt;
+    &lt;input type="file" id="load-input" ...&gt;
+    &lt;button id="btn-load"&gt;📂&lt;/button&gt;
+    ...
+    ${games.map(g => `&lt;div class="cell"&gt;...&lt;/div&gt;`).join('')}
+  &lt;/section&gt;
+&lt;/div&gt;`;
+// 然后马上用 getElementById 把元素抓回来绑定事件...
+const stage = document.getElementById('main-stage')!;
+const drawer = document.getElementById('drawer')!;
+</pre>
+
+<div class="warning">
+  <strong>问题：</strong>innerHTML + getElementById 的组合是极其脆弱的方式。任何 ID 拼写错误都会在运行时静默失败（返回 null → 解引用报错）。而且 innerHTML 销毁原有 DOM 再重建，意味着所有事件监听器丢失、状态重置。
+</div>
+
+<h4>建议替代方案：</h4>
+
+<pre>
+// 方案 A：使用 createElement（比 innerHTML 更安全）
+private createHomeView(): HTMLElement {
+  const stage = document.createElement('div');
+  stage.className = 'main-stage';
+  
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.addEventListener('change', this.onFileSelected);
+  
+  const button = document.createElement('button');
+  button.textContent = '📂';
+  button.addEventListener('pointerdown', () => input.click());
+  
+  stage.append(input, button);
+  return stage;  // 直接返回带事件绑定的 DOM
+}
+
+// 方案 B：使用 lit-html 等轻量模板库（~3KB）
+// 方案 C：引入 Astro / Svelte 等编译时框架
+</pre>
+
+<h3>7.3 类型安全</h3>
+
+<table>
+  <tr><th>方面</th><th>BGS 当前</th><th>建议</th></tr>
+  <tr>
+    <td>any 类型</td>
+    <td>renderer.ts 中多处 <code>data: unknown</code> 后强制类型断言</td>
+    <td>定义明确的 message type 联合类型：<code>type P2PMessage = AssignMsg | LobbyMsg | StateMsg | ErrorMsg</code></td>
+  </tr>
+  <tr>
+    <td>魔法字符串</td>
+    <td><code>d.type === 'assign'</code>、<code>d.type === 'lobby'</code> 散落各处</td>
+    <td>建立 <code>const MSG = { ASSIGN: 'assign', LOBBY: 'lobby', ... } as const</code></td>
+  </tr>
+  <tr>
+    <td>非空断言</td>
+    <td>大量 <code>!</code> 后置断言（如 <code>document.getElementById('x')!</code>）</td>
+    <td>封装 <code>getElementOrThrow&lt;T&gt;(id)</code> 实用函数，统一错误处理</td>
+  </tr>
+</table>
+
+<hr>
+
+<!-- ================ SECTION 8 ================ -->
+<h2 id="s8"><span class="badge">8</span> 构建配置与工程化 <span class="tag info">低优先</span></h2>
+
+<h3>8.1 Vite 配置对比</h3>
+
+<table>
+  <tr><th>配置项</th><th>AW-2025-Portfolio</th><th>BGS</th><th>评价</th></tr>
+  <tr><td>路径别名</td><td><code>@/</code> → <code>src/</code></td><td>无别名，用相对路径 <code>../core/xxx</code></td><td>BGS 应该加 <code>@/</code> 别名</td></tr>
+  <tr><td>SCSS 全局注入</td><td><code>additionalData</code> 注入 sass:math + helpers</td><td>无 SCSS</td><td>引入 SCSS 后用此</td></tr>
+  <tr><td>PWA</td><td>无</td><td><code>vite-plugin-pwa</code></td><td><span class="tag good">BGS 胜出</span></td></tr>
+  <tr><td>Git 版本注入</td><td>无</td><td><code>__COMMIT__</code> 编译时注入</td><td><span class="tag good">BGS 胜出</span></td></tr>
+  <tr><td>测试</td><td>无测试</td><td>Vitest + 4 个测试文件</td><td><span class="tag good">BGS 显著胜出</span></td></tr>
+</table>
+
+<h3>8.2 SCSS 自动注入（引入 SCSS 后）</h3>
+
+<pre>
+// vite.config.ts 增加
+css: {
+  preprocessorOptions: {
+    scss: {
+      additionalData: `
+        @use "sass:math";
+        @use "sass:map";
+        @use "@/styles/tokens" as *;
+        @use "@/styles/mixins" as *;
+      `,
+    },
+  },
+},
+</pre>
+
+<div class="tip">
+  这样每个 <code>&lt;style lang="scss"&gt;</code> 都能自动使用 <code>color()</code>、<code>mq()</code> 等函数，无需手动 import。
+</div>
+
+<hr>
+
+<!-- ================ SECTION 9 ================ -->
+<h2 id="s9"><span class="badge">9</span> L1/L2/L3 架构与参考项目的异同</h2>
+
+<div class="card">
+  <h4>BoardGameSimulator 的三层架构是其最大亮点：</h4>
+  <table>
+    <tr><th>层</th><th>内容</th><th>评价</th></tr>
+    <tr><td>L1 Data</td><td>卡牌定义、玩家数、UI 布局描述、可视性规则</td><td><span class="tag good">优秀</span> — JSON 驱动，游戏规则完全可配置</td></tr>
+    <tr><td>L2 Behavior</td><td>行为规则（触发条件 + 动作序列），由 engine 执行</td><td><span class="tag good">优秀</span> — 声明式规则引擎雏形</td></tr>
+    <tr><td>L3 Logic</td><td>Web Worker 沙箱中的自定义 JS 脚本（如斗地主牌型检测）</td><td><span class="tag good">优秀</span> — 安全隔离，支持热加载</td></tr>
+  </table>
+</div>
+
+<p>这个架构与 AW-2025-Portfolio 没有直接对应关系（AW 是展示型网站，不需要规则引擎），但 L1/L2/L3 的分层思想本身是<strong>架构教科书级别</strong>的设计，应继续深化。</p>
+
+<p>AW 值得借鉴的地方在于：<strong>把这套架构也用到 UI 层</strong>：</p>
+<ul>
+  <li>L1 中已有 <code>uiLayout</code> 和 <code>UISlotConfig</code> 的类型定义，但实际 UI 渲染并未读取这些配置</li>
+  <li>应让 Renderer 读取 L1 中的 <code>uiLayout</code>，动态渲染界面——这样不同游戏可以用不同 UI 布局</li>
+</ul>
+
+<hr>
+
+<!-- ================ SECTION 10 ================ -->
+<h2 id="s10"><span class="badge">10</span> 整体架构改进方向</h2>
+
+<h3>10.1 当前架构分析</h3>
+
+<pre style="line-height:1.8">
+     main.ts（胶水代码）
+        /    |    \
+   p2p.ts  engine.ts  renderer.ts
+   (P2P)   (游戏逻辑)  (UI渲染，417行)
+</pre>
+
+<p>这是一个 <strong>星型依赖</strong> 结构：main.ts 依赖所有模块，所有模块也通过回调依赖 main.ts。这是典型的初版 MVP 架构——快速但难以扩展。</p>
+
+<h3>10.2 建议的目标架构（以 AW 为参考）</h3>
+
+<pre style="line-height:1.8">
+                   EventBus（事件总线）
+                 /    /    |    \    \
+    GameEngine  P2PManager  Router  ViewComponents
+    (不变)       (不变)      (新增)   (拆分自renderer)
+
+     ┌─ HomeView       ─┐
+     ├─ LobbyView      ─┤
+     ├─ GameView       ─┤  ← 每个视图独立文件
+     ├─ CardComponent  ─┤     template + script + style
+     ├─ ScannerView    ─┤
+     └─ ToastView      ─┘
+</pre>
+
+<h3>10.3 渐进迁移路径</h3>
+
+<ol>
+  <li><strong>阶段 1（不改架构）</strong>：引入 SCSS + tokens 文件 → 统一颜色/间距管理 → 不影响运行时逻辑</li>
+  <li><strong>阶段 2（轻量重构）</strong>：创建 EventBus → 替换 main.ts 中的回调为事件 → 不改 UI 渲染方式</li>
+  <li><strong>阶段 3（视图拆分）</strong>：从 renderer.ts 中逐块抽出独立视图类 → 每个视图只负责一种界面</li>
+  <li><strong>阶段 4（可选）</strong>：引入 Astro / Svelte 等框架 → 声明式模板替代 innerHTML → 最大的改造成本</li>
+</ol>
+
+<h3>10.4 是否引入框架？</h3>
+
+<div class="compare">
+  <div class="left">
+    <h5>🔴 保持纯 TypeScript</h5>
+    <p>优点：零依赖、打包小、无学习成本</p>
+    <p>缺点：UI 代码量线性增长、无声明式模板、状态同步手动处理</p>
+  </div>
+  <div class="right">
+    <h5>🟢 引入 Astro / Svelte</h5>
+    <p>优点：声明式模板、组件隔离、内置 SCSS 支持、构建优化</p>
+    <p>缺点：学习成本、增加构建复杂度、框架版本升级维护</p>
+  </div>
+</div>
+
+<div class="tip">
+  <strong>建议：</strong>对于 BGS 这种交互密集型应用，<strong>Svelte（不是 Astro）</strong> 可能是更好的选择。Svelte 编译后无运行时、体积小（~2KB）、响应式系统天然适合游戏 UI 状态更新。Astro 更适合内容型网站（如 AW-2025-Portfolio）。
+</div>
+
+<hr>
+
+<!-- ================ SECTION 11 ================ -->
+<h2 id="s11"><span class="badge g">✓</span> BoardGameSimulator 已经做得好的地方</h2>
+
+<div class="card">
+  <p>在执行上述优化之前，值得肯定 BGS 已经具备的<strong>优秀设计和实践</strong>：</p>
+
+  <table>
+    <tr><th>领域</th><th>做对了什么</th><th>对比 AW</th></tr>
+    <tr>
+      <td><strong>测试</strong></td>
+      <td>4 个 vitest 测试文件，覆盖 reducer、registry、SDP、牌型检测</td>
+      <td><span class="tag good">BGS 显著优于 AW</span>（AW 0 测试）</td>
+    </tr>
+    <tr>
+      <td><strong>Core/Client 分层</strong></td>
+      <td>核心逻辑（engine、reducer、types）与 UI 渲染严格分离</td>
+      <td>优于 AW（AW 的 script 和 template 在同一文件中）</td>
+    </tr>
+    <tr>
+      <td><strong>L3 Worker 沙箱</strong></td>
+      <td>自定义游戏逻辑在 Web Worker 中运行，安全隔离，不阻塞主线程</td>
+      <td>AW 无此类需求，但设计本身值得学习</td>
+    </tr>
+    <tr>
+      <td><strong>Registry 模式</strong></td>
+      <td>Action/Condition/Component/Function 四类注册表，插件式扩展</td>
+      <td>AW 无类似模式</td>
+    </tr>
+    <tr>
+      <td><strong>P2P + QR 方案</strong></td>
+      <td>无服务器 WebRTC 连接，手动 SDP 裁剪压缩到 ~500 字节，可容于 QR</td>
+      <td>创新程度高于 AW</td>
+    </tr>
+    <tr>
+      <td><strong>类型定义</strong></td>
+      <td><code>types.ts</code> 163 行完整的类型体系，涵盖所有核心概念</td>
+      <td>与 AW 相当</td>
+    </tr>
+    <tr>
+      <td><strong>PWA 支持</strong></td>
+      <td>vite-plugin-pwa，manifest，离线缓存</td>
+      <td>BGS 胜出</td>
+    </tr>
+    <tr>
+      <td><strong>状态备份/迁移</strong></td>
+      <td>backup.ts + migration.ts 实现了主机掉线自动恢复</td>
+      <td>BGS 独有的工程问题</td>
+    </tr>
+    <tr>
+      <td><strong>issue_analysis.md</strong></td>
+      <td>17 个已追踪 issue，16 个已解决，结构化的问题管理</td>
+      <td>BGS 胜出</td>
+    </tr>
+  </table>
+</div>
+
+<hr>
+
+<!-- ================ SECTION 12 ================ -->
+<h2 id="s12"><span class="badge r">!</span> 优先级路线图</h2>
+
+<table>
+  <tr><th style="width:5em">优先级</th><th>任务</th><th>改动量</th><th>风险</th><th>收益</th></tr>
+  <tr>
+    <td><span class="tag danger">P0</span></td>
+    <td>引入 SCSS + tokens 文件（颜色、间距、字号统一管理）</td>
+    <td>中（需改所有 CSS）</td>
+    <td>低（仅视觉层）</td>
+    <td><strong>高</strong>：后续所有样式改动都受益</td>
+  </tr>
+  <tr>
+    <td><span class="tag danger">P0</span></td>
+    <td>renderer.ts 拆分：HomeView + LobbyView + GameView + ScannerView</td>
+    <td>大（重构核心文件）</td>
+    <td>中（需回归测试）</td>
+    <td><strong>极高</strong>：可维护性的质变</td>
+  </tr>
+  <tr>
+    <td><span class="tag danger">P0</span></td>
+    <td>用 createElement 替代 innerHTML 字符串拼接</td>
+    <td>大（需重写视图）</td>
+    <td>中</td>
+    <td><strong>高</strong>：消除运行时 null 风险</td>
+  </tr>
+  <tr>
+    <td><span class="tag warn">P1</span></td>
+    <td>引入 EventBus 替代回调</td>
+    <td>中（改 main.ts + renderer.ts 通信方式）</td>
+    <td>中</td>
+    <td><strong>高</strong>：解耦，支持视图拆分</td>
+  </tr>
+  <tr>
+    <td><span class="tag warn">P1</span></td>
+    <td>发牌/出牌/炸弹动画（GSAP 引入）</td>
+    <td>中（新增动画代码）</td>
+    <td>低</td>
+    <td><strong>高</strong>：用户体验质的飞跃</td>
+  </tr>
+  <tr>
+    <td><span class="tag warn">P1</span></td>
+    <td>消息类型联合类型 + 魔法字符串枚举化</td>
+    <td>小（改类型定义）</td>
+    <td>低</td>
+    <td>中</td>
+  </tr>
+  <tr>
+    <td><span class="tag info">P2</span></td>
+    <td>Web Component 封装 Card、PlayerRow 等 UI 元素</td>
+    <td>中</td>
+    <td>低</td>
+    <td>中</td>
+  </tr>
+  <tr>
+    <td><span class="tag info">P2</span></td>
+    <td>Vite alias <code>@/</code> → <code>src/</code></td>
+    <td>极小</td>
+    <td>极低</td>
+    <td>低（DX 提升）</td>
+  </tr>
+  <tr>
+    <td><span class="tag info">P3</span></td>
+    <td>考虑引入 Svelte（编译时框架）</td>
+    <td>极大（重写所有视图）</td>
+    <td>极高</td>
+    <td>极高（长期），但需谨慎评估</td>
+  </tr>
+</table>
+
+<hr>
+
+<h2 style="border-color:var(--green)">总结</h2>
+
+<div class="card" style="border-left:4px solid var(--green)">
+  <h4>核心结论</h4>
+  <p>BoardGameSimulator 在<strong>架构设计（L1/L2/L3、Core/Client 分离、Registry 模式、P2P 方案）和工程实践（测试、类型定义、issue 追踪）</strong>上已经达到甚至超过了 AW-2025-Portfolio 的水平。</p>
+  <p>差距集中在<strong>前端 UI 工程化</strong>方面：缺乏设计系统（SCSS tokens）、缺乏组件化（renderer.ts 是 God Object）、缺乏声明式模板（innerHTML 字符串拼接）、缺乏系统性的动画设计。</p>
+  <p>这些差距不是能力问题，而是<strong>阶段问题</strong>——BGS 是一个技术探索型项目（"能不能用 QR 传 WebRTC SDP？"），UI 是事后补的。当项目从 MVP 阶段走向成品阶段时，上述所有优化点都会变得必要。</p>
+</div>
+
+<p style="text-align:center;opacity:0.5;font-size:0.85rem;margin-top:3rem">
+  参考项目：<a href="https://github.com/AntoineW/AW-2025-Portfolio" style="color:var(--accent)">AW-2025-Portfolio</a>（CC BY-NC 4.0）&nbsp;|&nbsp; 分析对象：BoardGameSimulator
+</p>
+
+</div><!-- .site-wrap -->
+</body>
+</html>
