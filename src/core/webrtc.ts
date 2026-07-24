@@ -45,17 +45,17 @@ export async function createTemplateSdp(): Promise<string> {
 }
 
 export function applyFields(template: string, f: SdpFields): string {
+  const candBlock = f.c.map(c => 'a=' + c).join('\r\n');
   return template
     .replace(/m=application\s+\d+\s+\S+/g, `m=application ${f.mport} ${f.mproto}`)
-    .replace(/c=IN\s+\S+\s+\S+\r?\n/g, '')
+    .replace(/c=IN\s+\S+\s+\S+\r?\n/g, (m) => m + (candBlock ? candBlock + '\r\n' : ''))
+    .replace(/a=ice-options:trickle\r?\n/g, '')
     .replace(/a=ice-ufrag:\S+/g, `a=ice-ufrag:${f.u}`)
     .replace(/a=ice-pwd:\S+/g,    `a=ice-pwd:${f.w}`)
     .replace(/a=fingerprint:\S+ \S+/g, `a=fingerprint:${f.f}`)
     .replace(/a=setup:\S+/g,      `a=setup:${f.s}`)
     .replace(/a=sctp-port:\d+/g,  `a=sctp-port:${f.p}`)
-    .replace(/a=candidate:[^\r\n]*\r?\n?/g, '')
-    .trimEnd()
-    + '\r\n' + f.c.map(c => `a=${c}`).join('\r\n');
+    .replace(/a=candidate:[^\r\n]*\r?\n?/g, '');
 }
 
 function setupDC(dc: RTCDataChannel, conn: Connection, onMsg: MsgCb) {
