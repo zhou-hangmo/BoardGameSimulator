@@ -23,7 +23,7 @@ export function extractFields(sdp: string): SdpFields {
   const f = sdp.match(/a=fingerprint:(\S+ \S+)/);
   const s = sdp.match(/a=setup:(\S+)/);
   const sp = sdp.match(/a=sctp-port:(\d+)/);
-  const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ UDP \d+ \S+ \S+ typ host)/g)].map(m => m[1]);
+  const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ [uU][dD][pP] \d+ \S+ \S+ typ host)/g)].map(m => m[1]);
   if (!m || !pw || !f || !s) throw new Error('SDP missing essential fields');
   return { u: m[1], w: pw[1], f: f[1], s: s[1], p: sp?.[1] ?? '5000', c: candidates };
 }
