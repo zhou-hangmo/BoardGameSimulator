@@ -68,7 +68,7 @@ export class Renderer {
 
     document.getElementById('commit-count')!.textContent = '#' + __COMMIT__;
 
-    document.getElementById('btn-scan-home')?.addEventListener('click', () => this.startScanner((data, done) => {
+    document.getElementById('btn-scan-home')?.addEventListener('click', () => this.startScanner((data, done, retry) => {
       if (this.scannerHint) this.scannerHint.textContent = '正在连接...';
       this.cb.onJoinRoom(JSON.stringify(data)).then(() => {
         if (this.scannerHint) this.scannerHint.textContent = '连接成功';
@@ -76,7 +76,7 @@ export class Renderer {
       }).catch((e: Error) => {
         if (this.scannerHint) {
           this.scannerHint.textContent = '失败: ' + (e?.message || String(e));
-          setTimeout(() => { if (this.scannerHint) this.scannerHint.textContent = '将二维码对准取景框'; }, 3000);
+          setTimeout(retry, 3000);
         }
       });
     }));
@@ -217,7 +217,7 @@ export class Renderer {
     document.getElementById('btn-start')?.addEventListener('pointerdown', (e: any) => { if((e.target as HTMLButtonElement).disabled) return; this.cb.onStartGame(); });
     document.getElementById('btn-share')?.addEventListener('pointerdown', () => this.cb.onShareRoom());
     document.getElementById('btn-scan-guest')?.addEventListener('click', () => {
-      this.startScanner((data, done) => {
+      this.startScanner((data, done, retry) => {
         if (this.scannerHint) this.scannerHint.textContent = '正在连接...';
         this.cb.onScanGuestQr(JSON.stringify(data)).then(() => {
           if (this.scannerHint) this.scannerHint.textContent = '连接成功';
@@ -225,7 +225,7 @@ export class Renderer {
         }).catch((e: Error) => {
           if (this.scannerHint) {
             this.scannerHint.textContent = '失败: ' + (e?.message || String(e));
-            setTimeout(() => { if (this.scannerHint) this.scannerHint.textContent = '将二维码对准取景框'; }, 3000);
+            setTimeout(retry, 3000);
           }
         });
       });
@@ -279,7 +279,7 @@ export class Renderer {
   private scannerStream: MediaStream | null = null;
   private scannerHint: HTMLElement | null = null;
 
-  private async startScanner(onResult: (data: unknown, done: () => void) => void): Promise<void> {
+  private async startScanner(onResult: (data: unknown, done: () => void, retry: () => void) => void): Promise<void> {
     // Create scanner overlay
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;display:flex;flex-direction:column;';
@@ -341,7 +341,9 @@ export class Renderer {
 
       let lastDetected = '';
       let done = false;
-      const finish = () => { done = true; cleanup(); };
+      let processing = false;
+      const finish = () => { done = true; processing = false; cleanup(); };
+      const retry = () => { processing = false; lastDetected = ''; };
 
       const tick = () => {
         if (done || !this.scannerStream) return;
@@ -350,7 +352,7 @@ export class Renderer {
         ctx.drawImage(video, 0, 0);
         const raw = decodeFrame();
         const now = Date.now();
-        if (now - lastLogTime > 500) {
+        if (now - lastLogTime > 500 && !processing) {
           const fps = Math.round((frameCount / ((now - lastLogTime) / 1000)));
           if (raw) {
             hint.textContent = '✅ 检测到二维码';
@@ -366,7 +368,8 @@ export class Renderer {
           lastDetected = raw;
           try {
             const data = JSON.parse(raw);
-            onResult(data, finish);
+            processing = true;
+            onResult(data, finish, retry);
           } catch { /* not our QR */ }
         }
         requestAnimationFrame(tick);
