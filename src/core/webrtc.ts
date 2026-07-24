@@ -28,7 +28,7 @@ export function extractFields(sdp: string): SdpFields {
 }
 
 export function buildSdp(f: SdpFields): string {
-  const sid = `${Date.now()} ${Math.random().toString(36).slice(2, 6)}`;
+  const sid = `${Date.now()}${Math.floor(Math.random()*1e9)}`;
   const lines = ['v=0', `o=- ${sid} 2 IN IP4 127.0.0.1`, 's=-', 't=0 0', 'a=group:BUNDLE 0',
     'm=application 9 UDP/DTLS/SCTP webrtc-datachannel', 'c=IN IP4 0.0.0.0', 'a=mid:0',
     `a=ice-ufrag:${f.u}`, `a=ice-pwd:${f.w}`, `a=fingerprint:${f.f}`, `a=setup:${f.s}`, 'a=sctp-port:5000'];
