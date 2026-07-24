@@ -110,7 +110,7 @@ export class HomeView extends BaseView {
   }
 
   private bindEvents(): void {
-    const loadInput = qs<HTMLInputElement>('#load-input', this.stage);
+    const loadInput = qs<HTMLInputElement>('#load-input', this.root);
     qs('#btn-load', this.stage).addEventListener('pointerdown', () => loadInput?.click());
 
     loadInput?.addEventListener('change', async () => {
