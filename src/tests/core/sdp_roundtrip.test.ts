@@ -1,8 +1,8 @@
-// SDP round-trip + QR scan tests — updated for flat format
+// SDP round-trip tests — extract + template-based apply
 import { describe, it, expect } from 'vitest';
-import { extractFields, buildSdp, type SdpFields } from '../../core/webrtc';
+import { extractFields } from '../../core/webrtc';
 import { encodeQR } from '../../core/qrcode';
-import { readFileSync, writeFileSync } from 'fs';
+import { writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 const MOCK_SDP = `v=0
@@ -25,17 +25,10 @@ a=candidate:3 1 UDP 2130706431 10.0.0.1 53126 typ srflx
 a=candidate:4 1 UDP 2130706431 1.2.3.4 53126 typ relay`;
 
 describe('SDP flat round-trip', () => {
-    it('extract → build → extract 一致', () => {
+  it('extract 提取 host-only UDP candidates', () => {
     const fields = extractFields(MOCK_SDP);
     expect(fields.u).toBe('abcd');
     expect(fields.c.length).toBe(2); // only host, srflx+relay filtered
-
-    const sdp = buildSdp(fields);
-    const fields2 = extractFields(sdp);
-    expect(fields2.u).toBe(fields.u);
-    expect(fields2.w).toBe(fields.w);
-    expect(fields2.f).toBe(fields.f);
-    expect(fields2.c.length).toBe(2);
   });
 
   it('QR 数据 < 400 bytes', async () => {

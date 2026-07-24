@@ -28,13 +28,24 @@ export function extractFields(sdp: string): SdpFields {
   return { u: m[1], w: pw[1], f: f[1], s: s[1], p: sp?.[1] ?? '5000', c: candidates };
 }
 
-export function buildSdp(f: SdpFields): string {
-  const sid = `${Date.now()}${Math.floor(Math.random()*1e9)}`;
-  const lines = ['v=0', `o=- ${sid} 2 IN IP4 127.0.0.1`, 's=-', 't=0 0', 'a=group:BUNDLE 0',
-    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel', 'c=IN IP4 0.0.0.0', 'a=mid:0',
-    `a=ice-ufrag:${f.u}`, `a=ice-pwd:${f.w}`, `a=fingerprint:${f.f}`, `a=setup:${f.s}`, `a=sctp-port:${f.p}`];
-  for (const cand of f.c) lines.push(`a=${cand}`);
-  return lines.join('\r\n');
+async function createTemplateSdp(): Promise<string> {
+  const pc = new RTCPeerConnection(ICE_SERVERS);
+  try {
+    pc.createDataChannel('_t');
+    const offer = await pc.createOffer();
+    return offer.sdp!;
+  } finally { pc.close(); }
+}
+
+function applyFields(template: string, f: SdpFields): string {
+  return template
+    .replace(/a=ice-ufrag:\S+/g, `a=ice-ufrag:${f.u}`)
+    .replace(/a=ice-pwd:\S+/g,    `a=ice-pwd:${f.w}`)
+    .replace(/a=fingerprint:\S+ \S+/g, `a=fingerprint:${f.f}`)
+    .replace(/a=setup:\S+/g,      `a=setup:${f.s}`)
+    .replace(/a=sctp-port:\d+/g,  `a=sctp-port:${f.p}`)
+    .replace(/a=candidate:.*\r?\n?/g, '')
+    + '\r\n' + f.c.map(c => `a=${c}`).join('\r\n');
 }
 
 function setupDC(dc: RTCDataChannel, conn: Connection, onMsg: MsgCb) {
@@ -58,7 +69,8 @@ export async function hostCreateOffer(roomCode: string, onMsg: MsgCb): Promise<C
 export async function hostAcceptAnswer(roomCode: string, fields: SdpFields): Promise<Connection> {
   const conn = _conns.get(roomCode);
   if (!conn) throw new Error('no matching connection');
-  await conn.pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: buildSdp(fields) }));
+  const sdp = applyFields(await createTemplateSdp(), fields);
+  await conn.pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp }));
   return conn;
 }
 
@@ -66,7 +78,8 @@ export async function guestCreateAnswer(fields: SdpFields, onMsg: MsgCb): Promis
   const pc = new RTCPeerConnection(ICE_SERVERS);
   const conn: Connection = { pc, dc: null!, peerId: 'host' };
   pc.ondatachannel = (e) => { conn.dc = e.channel; setupDC(e.channel, conn, onMsg); };
-  await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: buildSdp(fields) }));
+  const sdp = applyFields(await createTemplateSdp(), fields);
+  await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   await waitIceComplete(pc);
