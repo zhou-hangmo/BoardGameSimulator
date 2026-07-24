@@ -47,7 +47,7 @@ export async function createTemplateSdp(): Promise<string> {
 export function applyFields(template: string, f: SdpFields): string {
   return template
     .replace(/m=application\s+\d+\s+\S+/g, `m=application ${f.mport} ${f.mproto}`)
-    .replace(/c=IN\s+\S+\s+\S+/g,      `c=IN ${f.conn} ${f.addr}`)
+    .replace(/c=IN\s+\S+\s+\S+\r?\n/g, '')
     .replace(/a=ice-ufrag:\S+/g, `a=ice-ufrag:${f.u}`)
     .replace(/a=ice-pwd:\S+/g,    `a=ice-pwd:${f.w}`)
     .replace(/a=fingerprint:\S+ \S+/g, `a=fingerprint:${f.f}`)
