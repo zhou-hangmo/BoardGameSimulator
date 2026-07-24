@@ -78,11 +78,17 @@ export class Renderer {
         if (this.scannerHint) {
           this.scannerHint.innerHTML = `失败: ${msg} <button class="copy-err-btn" style="margin-left:6px;cursor:pointer;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:12px;">📋 复制</button>`;
           const btn = this.scannerHint.querySelector('.copy-err-btn');
-          if (btn) btn.addEventListener('click', () => {
-            navigator.clipboard.writeText(msg).then(() => {
-              if (this.scannerHint) this.scannerHint.textContent = '已复制！';
-              setTimeout(retry, 1000);
-            });
+          if (btn) btn.addEventListener('click', async () => {
+            let ok = false;
+            try { await navigator.clipboard.writeText(msg); ok = true; } catch { /* fallback */ }
+            if (!ok) {
+              const ta = document.createElement('textarea');
+              ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+              ta.value = msg; document.body.appendChild(ta);
+              ta.select(); ok = document.execCommand('copy'); ta.remove();
+            }
+            if (this.scannerHint) this.scannerHint.textContent = ok ? '已复制！' : '复制失败';
+            setTimeout(retry, ok ? 1000 : 3000);
           });
           setTimeout(retry, 5000);
         }
@@ -235,11 +241,17 @@ export class Renderer {
           if (this.scannerHint) {
             this.scannerHint.innerHTML = `失败: ${msg} <button class="copy-err-btn" style="margin-left:6px;cursor:pointer;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:12px;">📋 复制</button>`;
             const btn = this.scannerHint.querySelector('.copy-err-btn');
-            if (btn) btn.addEventListener('click', () => {
-              navigator.clipboard.writeText(msg).then(() => {
-                if (this.scannerHint) this.scannerHint.textContent = '已复制！';
-                setTimeout(retry, 1000);
-              });
+            if (btn) btn.addEventListener('click', async () => {
+              let ok = false;
+              try { await navigator.clipboard.writeText(msg); ok = true; } catch { /* fallback */ }
+              if (!ok) {
+                const ta = document.createElement('textarea');
+                ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+                ta.value = msg; document.body.appendChild(ta);
+                ta.select(); ok = document.execCommand('copy'); ta.remove();
+              }
+              if (this.scannerHint) this.scannerHint.textContent = ok ? '已复制！' : '复制失败';
+              setTimeout(retry, ok ? 1000 : 3000);
             });
             setTimeout(retry, 5000);
           }
