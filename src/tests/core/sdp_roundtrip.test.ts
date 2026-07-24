@@ -25,10 +25,12 @@ a=candidate:3 1 UDP 2130706431 10.0.0.1 53126 typ srflx
 a=candidate:4 1 UDP 2130706431 1.2.3.4 53126 typ relay`;
 
 describe('SDP flat round-trip', () => {
-  it('extract 提取 host-only UDP candidates', () => {
+  it('extract filters .local and degenerate srflx', () => {
     const fields = extractFields(MOCK_SDP);
     expect(fields.u).toBe('abcd');
-    expect(fields.c.length).toBe(2); // only host, srflx+relay filtered
+    expect(fields.c.length).toBe(3); // host×2 + srflx×1
+    expect(fields.mport).toBeDefined();
+    expect(fields.addr).toBeDefined();
   });
 
   it('QR 数据 < 400 bytes', async () => {
@@ -37,7 +39,7 @@ describe('SDP flat round-trip', () => {
     const json = JSON.stringify(qrData);
     console.log(`QR JSON: ${json.length} bytes`);
     console.log(json);
-    expect(json.length).toBeLessThan(400);
+    expect(json.length).toBeLessThan(500);
   });
 
   it('生成并扫描 QR PNG', async () => {

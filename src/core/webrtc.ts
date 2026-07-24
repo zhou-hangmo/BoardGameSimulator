@@ -15,7 +15,7 @@ export interface Connection {
 
 type MsgCb = (conn: Connection, data: unknown) => void;
 
-export interface SdpFields { u: string; w: string; f: string; s: string; p: string; c: string[] }
+export interface SdpFields { u: string; w: string; f: string; s: string; p: string; c: string[]; mport: string; mproto: string; conn: string; addr: string }
 
 export function extractFields(sdp: string): SdpFields {
   const m = sdp.match(/a=ice-ufrag:(\S+)/);
@@ -23,9 +23,15 @@ export function extractFields(sdp: string): SdpFields {
   const f = sdp.match(/a=fingerprint:(\S+ \S+)/);
   const s = sdp.match(/a=setup:(\S+)/);
   const sp = sdp.match(/a=sctp-port:(\d+)/);
-  const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ [uU][dD][pP] \d+ \S+ \S+ typ host)/g)].map(m => m[1]);
+  const conn = sdp.match(/c=IN\s+(\S+)\s+(\S+)/);
+  const media = sdp.match(/m=application\s+(\d+)\s+(\S+)/);
+  const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ [uU][dD][pP] \d+ \S+ \S+ typ (host|srflx).*)/g)]
+    .map(x => x[1])
+    .filter(c => !c.includes('.local') && !c.includes('raddr 0.0.0.0'));
   if (!m || !pw || !f || !s) throw new Error('SDP missing essential fields');
-  return { u: m[1], w: pw[1], f: f[1], s: s[1], p: sp?.[1] ?? '5000', c: candidates };
+  return { u: m[1], w: pw[1], f: f[1], s: s[1], p: sp?.[1] ?? '5000', c: candidates,
+    mport: media?.[1] ?? '9', mproto: media?.[2] ?? 'UDP/DTLS/SCTP webrtc-datachannel',
+    conn: conn?.[1] ?? 'IP4', addr: conn?.[2] ?? '0.0.0.0' };
 }
 
 export async function createTemplateSdp(): Promise<string> {
@@ -39,6 +45,8 @@ export async function createTemplateSdp(): Promise<string> {
 
 export function applyFields(template: string, f: SdpFields): string {
   return template
+    .replace(/m=application\s+\d+\s+\S+/g, `m=application ${f.mport} ${f.mproto}`)
+    .replace(/c=IN\s+\S+\s+\S+/g,      `c=IN ${f.conn} ${f.addr}`)
     .replace(/a=ice-ufrag:\S+/g, `a=ice-ufrag:${f.u}`)
     .replace(/a=ice-pwd:\S+/g,    `a=ice-pwd:${f.w}`)
     .replace(/a=fingerprint:\S+ \S+/g, `a=fingerprint:${f.f}`)
