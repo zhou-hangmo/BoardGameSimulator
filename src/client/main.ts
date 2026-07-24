@@ -13,6 +13,8 @@ let engine: GameEngine | null = null;
 let myIdx = 0;
 let isHost = false;
 let room = '';
+let lobbyPlayers: { name: string; isHost: boolean }[] = [];
+let lobbyQrImg = '';
 
 const installedGames: GameMeta[] = [{
   id: 'doudizhu', name: '斗地主', description: '经典三人扑克',
@@ -68,6 +70,7 @@ renderer.init({
 
     const players: { name: string; isHost: boolean }[] = [{ name: '你', isHost: true }];
     const qrImg = await p2p.getHostQrImage();
+    lobbyPlayers = players; lobbyQrImg = qrImg;
     renderer.showLobby(room, players, qrImg);
 
     p2p.onAction(async (action: GameAction) => {
@@ -79,12 +82,6 @@ renderer.init({
         return;
       }
       broadcastGame();
-    });
-
-    p2p.onPlayerJoin((peerId: string) => {
-      const idx = p2p.getPeerIds().indexOf(peerId) + 1;
-      players.push({ name: `玩家 ${idx}`, isHost: false });
-      renderer.showLobby(room, players, qrImg);
     });
 
     return room;
@@ -129,13 +126,12 @@ renderer.init({
     const pid = await p2p.acceptGuestAnswer(qrData);
     const ready = await p2p.waitForDcOpen(pid, 10000);
     if (!ready) { renderer.showToast('连接超时'); return; }
-    const allPeers = p2p.getPeerIds();
-    const idx = allPeers.indexOf(pid) + 1;
-    const plist: { name: string; isHost: boolean }[] = [{ name: '你', isHost: true }];
-    for (let i = 0; i < allPeers.length; i++) {
-      plist.push({ name: `玩家 ${i + 1}`, isHost: false });
-    }
+    const idx = p2p.getPeerCount();
+    lobbyPlayers.push({ name: `玩家 ${idx}`, isHost: false });
+    renderer.showLobby(room, lobbyPlayers, lobbyQrImg);
     p2p.sendRaw(pid, 'assign', { playerIndex: idx });
+    const plist: { name: string; isHost: boolean }[] = [{ name: '你', isHost: true },
+      ...p2p.getPeerIds().map((_, i) => ({ name: `玩家 ${i + 1}`, isHost: false }))];
     p2p.sendRaw(pid, 'lobby', { players: plist });
     renderer.showToast('玩家已连接');
   },

@@ -13,7 +13,6 @@ export class P2PManager {
   private peerIdx = 0;
   private onActionCb: ((action: GameAction) => void) | null = null;
   private onMsgCb: MsgCb | null = null;
-  private onPeerJoinCb: ((id: string) => void) | null = null;
 
   async createRoom(): Promise<string> {
     this.roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -32,7 +31,6 @@ export class P2PManager {
     const conn = this.conns.get('_pending');
     if (conn) this.conns.set(pid, conn);
     this.conns.delete('_pending');
-    this.onPeerJoinCb?.(pid);
     const next = await hostCreateOffer(this.roomCode, (_c, d) => this.handleIncoming('guest', d));
     this.conns.set('_pending', next);
     this.hostFields = extractFields(next.pc.localDescription!.sdp!);
@@ -71,7 +69,6 @@ export class P2PManager {
 
   onAction(cb: (action: GameAction) => void) { this.onActionCb = cb; }
   onMessage(cb: MsgCb) { this.onMsgCb = cb; }
-  onPlayerJoin(cb: (id: string) => void) { this.onPeerJoinCb = cb; }
   getPeerIds(): string[] { return Array.from(this.conns.keys()).filter(k => k !== 'host' && k !== '_pending'); }
   getPeerCount(): number { return this.peerIdx; }
   getRoomCode(): string { return this.roomCode; }

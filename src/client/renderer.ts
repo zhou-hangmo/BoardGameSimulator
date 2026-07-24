@@ -180,7 +180,7 @@ export class Renderer {
     window.addEventListener('mouseup', () => onUp());
     // Wheel
     document.addEventListener('wheel', (e: WheelEvent) => {
-      if (hasKeyboard()) return;
+      if (hasKeyboard() || (e.target as Element)?.closest('.scroll')) return;
       e.preventDefault();
       if (e.deltaY > 0 && !open) snap(true);
       else if (e.deltaY < 0 && open) snap(false);
