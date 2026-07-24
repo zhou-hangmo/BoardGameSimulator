@@ -26,9 +26,9 @@ export function extractFields(sdp: string): SdpFields {
   const sp = sdp.match(/a=sctp-port:(\d+)/);
   const conn = sdp.match(/c=IN\s+(\S+)\s+(\S+)/);
   const media = sdp.match(/m=application\s+(\d+)\s+(\S+)/);
-  const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ [uU][dD][pP] \d+ \S+ \S+ typ host.*)/g)]
+  const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ [uU][dD][pP] \d+ \S+ \S+ typ (host|srflx).*)/g)]
     .map(x => x[1])
-    .filter(c => !c.includes('.local') && !c.includes('raddr 0.0.0.0'))
+    .filter(c => !c.includes('.local'))
     .map(c => c.replace(/\s+generation\s+\d+/g, '').replace(/\s+network-(cost|id)\s+\d+/g, ''));
   if (!m || !pw || !f || !s) throw new Error('SDP missing essential fields');
   return { u: m[1], w: pw[1], f: f[1], s: s[1], p: sp?.[1] ?? '5000', c: candidates,

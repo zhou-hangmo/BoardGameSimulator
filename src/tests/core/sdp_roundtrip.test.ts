@@ -28,7 +28,7 @@ describe('SDP flat round-trip', () => {
   it('extract filters .local and degenerate srflx', () => {
     const fields = extractFields(MOCK_SDP);
     expect(fields.u).toBe('abcd');
-    expect(fields.c.length).toBe(2); // host only, srflx+relay filtered
+    expect(fields.c.length).toBe(3); // host×2 + srflx×1
     expect(fields.mport).toBeDefined();
     expect(fields.addr).toBeDefined();
   });
