@@ -22,7 +22,7 @@ export function extractFields(sdp: string): SdpFields {
   const p = sdp.match(/a=ice-pwd:(\S+)/);
   const f = sdp.match(/a=fingerprint:(\S+ \S+)/);
   const s = sdp.match(/a=setup:(\S+)/);
-  const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ \S+ \d+ \S+ \S+ typ host)/g)].map(m => m[1]);
+  const candidates = [...sdp.matchAll(/a=(candidate:\S+ \d+ UDP \d+ \S+ \S+ typ host)/g)].map(m => m[1]);
   if (!m || !p || !f || !s) throw new Error('SDP missing essential fields');
   return { u: m[1], w: p[1], f: f[1], s: s[1], c: candidates };
 }
