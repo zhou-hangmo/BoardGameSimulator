@@ -1,4 +1,3 @@
-import basicSsl from "@vitejs/plugin-basic-ssl";
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'child_process';
@@ -25,7 +24,7 @@ export default defineConfig({
     open: true,
   },
   worker: { format: 'es' },
-  plugins: [basicSsl(), 
+  plugins: [ 
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
