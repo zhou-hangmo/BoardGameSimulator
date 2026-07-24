@@ -16,6 +16,9 @@ export default defineConfig({
     outDir: 'docs',
     target: 'es2020',
     sourcemap: false,
+    rollupOptions: {
+      input: { main: 'index.html', diag: 'diag.html' },
+    },
   },
   server: {
     port: 3000,

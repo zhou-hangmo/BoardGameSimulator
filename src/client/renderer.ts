@@ -74,9 +74,13 @@ export class Renderer {
         if (this.scannerHint) this.scannerHint.textContent = '连接成功';
         setTimeout(done, 500);
       }).catch((e: Error) => {
+        const msg = e?.message || String(e);
         if (this.scannerHint) {
-          this.scannerHint.textContent = '失败: ' + (e?.message || String(e));
-          setTimeout(retry, 3000);
+          this.scannerHint.innerHTML = `失败: ${msg} <button id="copy-err" style="margin-left:6px;cursor:pointer;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:12px;">📋 复制</button>`;
+          document.getElementById('copy-err')?.addEventListener('click', () => {
+            navigator.clipboard.writeText(msg).then(() => this.showToast('已复制'));
+          });
+          setTimeout(retry, 5000);
         }
       });
     }));
@@ -223,9 +227,13 @@ export class Renderer {
           if (this.scannerHint) this.scannerHint.textContent = '连接成功';
           setTimeout(done, 500);
         }).catch((e: Error) => {
+          const msg = e?.message || String(e);
           if (this.scannerHint) {
-            this.scannerHint.textContent = '失败: ' + (e?.message || String(e));
-            setTimeout(retry, 3000);
+            this.scannerHint.innerHTML = `失败: ${msg} <button id="copy-err" style="margin-left:6px;cursor:pointer;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:12px;">📋 复制</button>`;
+            document.getElementById('copy-err')?.addEventListener('click', () => {
+              navigator.clipboard.writeText(msg).then(() => this.showToast('已复制'));
+            });
+            setTimeout(retry, 5000);
           }
         });
       });
