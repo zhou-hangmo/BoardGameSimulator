@@ -7,7 +7,6 @@ type MsgCb = (fromPeerId: string, data: unknown) => void;
 
 export class P2PManager {
   private conns = new Map<string, Connection>();
-  private pending = new Map<string, { type: string; payload: unknown }[]>();
   private roomCode: string = '';
   private hostFields: SdpFields | null = null;
   private guestFields: SdpFields | null = null;
@@ -31,10 +30,7 @@ export class P2PManager {
     this.peerIdx++;
     const pid = `player-${this.peerIdx}`;
     const conn = this.conns.get('_pending');
-    if (conn) {
-      this.conns.set(pid, conn);
-      conn.onDcOpen = () => { const q = this.pending.get(pid); if (q) { q.forEach(m => sendJson(conn, m)); this.pending.delete(pid); } };
-    }
+    if (conn) this.conns.set(pid, conn);
     this.conns.delete('_pending');
     this.onPeerJoinCb?.(pid);
     const next = await hostCreateOffer(this.roomCode, (_c, d) => this.handleIncoming('guest', d));
@@ -66,14 +62,7 @@ export class P2PManager {
 
   sendRaw(peerId: string, type: string, payload: unknown) {
     const conn = this.conns.get(peerId);
-    if (!conn) return;
-    if (conn.dc?.readyState === 'open') {
-      sendJson(conn, { type, payload });
-    } else {
-      const q = this.pending.get(peerId) ?? [];
-      q.push({ type, payload });
-      this.pending.set(peerId, q);
-    }
+    if (conn?.dc?.readyState === 'open') sendJson(conn, { type, payload });
   }
 
   broadcastRaw(type: string, payload: unknown) {
@@ -89,6 +78,18 @@ export class P2PManager {
 
   async shareRoom(): Promise<string> {
     return encodeQR({ t: 'offer', rc: this.roomCode, ...this.hostFields } as any);
+  }
+
+  async waitForDcOpen(peerId: string, timeoutMs = 10000): Promise<boolean> {
+    const conn = this.conns.get(peerId);
+    if (!conn) return false;
+    if (conn.dc?.readyState === 'open') return true;
+    return new Promise(resolve => {
+      const onOpen = () => { resolve(true); };
+      const timer = setTimeout(() => { resolve(false); }, timeoutMs);
+      const prev = conn.onDcOpen;
+      conn.onDcOpen = () => { clearTimeout(timer); prev?.(); onOpen(); };
+    });
   }
 
   leave() {

@@ -127,7 +127,8 @@ renderer.init({
 
   onScanGuestQr: async (qrData: string) => {
     const pid = await p2p.acceptGuestAnswer(qrData);
-    // Send assign + lobby to guest (queued until DC opens)
+    const ready = await p2p.waitForDcOpen(pid, 10000);
+    if (!ready) { renderer.showToast('连接超时'); return; }
     const allPeers = p2p.getPeerIds();
     const idx = allPeers.indexOf(pid) + 1;
     const plist: { name: string; isHost: boolean }[] = [{ name: '你', isHost: true }];
