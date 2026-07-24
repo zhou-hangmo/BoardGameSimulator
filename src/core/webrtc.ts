@@ -44,7 +44,8 @@ export function applyFields(template: string, f: SdpFields): string {
     .replace(/a=fingerprint:\S+ \S+/g, `a=fingerprint:${f.f}`)
     .replace(/a=setup:\S+/g,      `a=setup:${f.s}`)
     .replace(/a=sctp-port:\d+/g,  `a=sctp-port:${f.p}`)
-    .replace(/a=candidate:.*\r?\n?/g, '')
+    .replace(/a=candidate:[^\r\n]*\r?\n?/g, '')
+    .trimEnd()
     + '\r\n' + f.c.map(c => `a=${c}`).join('\r\n');
 }
 
