@@ -11,6 +11,7 @@ export interface Connection {
   pc: RTCPeerConnection;
   dc: RTCDataChannel;
   peerId: string;
+  onDcOpen?: () => void;
 }
 
 type MsgCb = (conn: Connection, data: unknown) => void;
@@ -59,7 +60,7 @@ export function applyFields(template: string, f: SdpFields): string {
 }
 
 function setupDC(dc: RTCDataChannel, conn: Connection, onMsg: MsgCb) {
-  dc.onopen = () => console.log(`[WebRTC] DC open: ${conn.peerId}`);
+  dc.onopen = () => { console.log(`[WebRTC] DC open: ${conn.peerId}`); conn.onDcOpen?.(); };
   dc.onmessage = (e) => { try { const m = JSON.parse(e.data); onMsg(conn, m); } catch { /* */ } };
   dc.onclose = () => console.log(`[WebRTC] DC closed: ${conn.peerId}`);
 }

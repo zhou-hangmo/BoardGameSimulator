@@ -7,6 +7,7 @@ type MsgCb = (fromPeerId: string, data: unknown) => void;
 
 export class P2PManager {
   private conns = new Map<string, Connection>();
+  private pending = new Map<string, { type: string; payload: unknown }[]>();
   private roomCode: string = '';
   private hostFields: SdpFields | null = null;
   private guestFields: SdpFields | null = null;
@@ -30,7 +31,10 @@ export class P2PManager {
     this.peerIdx++;
     const pid = `player-${this.peerIdx}`;
     const conn = this.conns.get('_pending');
-    if (conn) this.conns.set(pid, conn);
+    if (conn) {
+      this.conns.set(pid, conn);
+      conn.onDcOpen = () => { const q = this.pending.get(pid); if (q) { q.forEach(m => sendJson(conn, m)); this.pending.delete(pid); } };
+    }
     this.conns.delete('_pending');
     this.onPeerJoinCb?.(pid);
     const next = await hostCreateOffer(this.roomCode, (_c, d) => this.handleIncoming('guest', d));
@@ -62,7 +66,14 @@ export class P2PManager {
 
   sendRaw(peerId: string, type: string, payload: unknown) {
     const conn = this.conns.get(peerId);
-    if (conn) sendJson(conn, { type, payload });
+    if (!conn) return;
+    if (conn.dc?.readyState === 'open') {
+      sendJson(conn, { type, payload });
+    } else {
+      const q = this.pending.get(peerId) ?? [];
+      q.push({ type, payload });
+      this.pending.set(peerId, q);
+    }
   }
 
   broadcastRaw(type: string, payload: unknown) {

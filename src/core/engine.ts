@@ -251,29 +251,28 @@ export class GameEngine {
 
   // ========== 生命周期 ==========
 
-  startGame(): void {
+  startGame(count?: number): void {
     if (!this.config) throw new Error('未加载游戏配置');
     const l1 = this.config.l1;
-    // Shuffle
     const deck = [...l1.cards];
     for (let i = deck.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [deck[i], deck[j]] = [deck[j], deck[i]];
     }
-    // Deal 17 to each player, 3 bottom
-    const count = l1.players.count;
+    const total = count ?? l1.players.count;
+    const cardsPer = Math.floor(51 / total);
     const players = [];
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < total; i++) {
       players.push({
         index: i,
         name: i === 0 ? '你' : `玩家 ${i + 1}`,
-        hand: deck.slice(i * 17, (i + 1) * 17),
-        handCount: 17,
+        hand: deck.slice(i * cardsPer, (i + 1) * cardsPer),
+        handCount: cardsPer,
         isHost: i === 0,
         isDisconnected: false,
       });
     }
-    const bottomCards = deck.slice(51);
+    const bottomCards = deck.slice(total * cardsPer, total * cardsPer + 3);
     this.state = { ...this.state, players, deck: [], bottomCards, phase: 'calling', currentTurn: 0 };
   }
 

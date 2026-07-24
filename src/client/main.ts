@@ -92,7 +92,12 @@ renderer.init({
 
   onStartGame: () => {
     if (!engine || !isHost) return;
-    engine.startGame();
+    const needs = (doudizhuConfig as GameConfig).meta.maxPlayers;
+    if (p2p.getPeerCount() + 1 < needs) {
+      renderer.showToast(`需要至少 ${needs} 人`);
+      return;
+    }
+    engine.startGame(p2p.getPeerCount() + 1);
     broadcastGame();
   },
 
@@ -104,7 +109,13 @@ renderer.init({
 
     p2p.onMessage((_peerId, data) => {
       const d = data as { type: string; payload: unknown };
-      if (d.type === 'state') {
+      if (d.type === 'assign') {
+        myIdx = (d.payload as { playerIndex: number }).playerIndex;
+        renderer.showToast(`你已加入 - 位置 ${myIdx + 1}`);
+      } else if (d.type === 'lobby') {
+        const plist = (d.payload as { players: { name: string; isHost: boolean }[] }).players;
+        if (plist) renderer.showWaitRoom(room, plist);
+      } else if (d.type === 'state') {
         const view = d.payload as PlayerView;
         myIdx = view.playerIndex;
         renderer.showGame(view);
@@ -115,7 +126,16 @@ renderer.init({
   },
 
   onScanGuestQr: async (qrData: string) => {
-    await p2p.acceptGuestAnswer(qrData);
+    const pid = await p2p.acceptGuestAnswer(qrData);
+    // Send assign + lobby to guest (queued until DC opens)
+    const allPeers = p2p.getPeerIds();
+    const idx = allPeers.indexOf(pid) + 1;
+    const plist: { name: string; isHost: boolean }[] = [{ name: '你', isHost: true }];
+    for (let i = 0; i < allPeers.length; i++) {
+      plist.push({ name: `玩家 ${i + 1}`, isHost: false });
+    }
+    p2p.sendRaw(pid, 'assign', { playerIndex: idx });
+    p2p.sendRaw(pid, 'lobby', { players: plist });
     renderer.showToast('玩家已连接');
   },
 
