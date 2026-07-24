@@ -28,7 +28,7 @@ export function extractFields(sdp: string): SdpFields {
   return { u: m[1], w: pw[1], f: f[1], s: s[1], p: sp?.[1] ?? '5000', c: candidates };
 }
 
-async function createTemplateSdp(): Promise<string> {
+export async function createTemplateSdp(): Promise<string> {
   const pc = new RTCPeerConnection(ICE_SERVERS);
   try {
     pc.createDataChannel('_t');
@@ -37,7 +37,7 @@ async function createTemplateSdp(): Promise<string> {
   } finally { pc.close(); }
 }
 
-function applyFields(template: string, f: SdpFields): string {
+export function applyFields(template: string, f: SdpFields): string {
   return template
     .replace(/a=ice-ufrag:\S+/g, `a=ice-ufrag:${f.u}`)
     .replace(/a=ice-pwd:\S+/g,    `a=ice-pwd:${f.w}`)
