@@ -62,12 +62,6 @@ function showLobby(): void {
   showNonHomeView();
 }
 
-function showWaitRoom(): void {
-  lobbyView.showWaitRoom(room, lobbyPlayers);
-  lobbyView.mount();
-  showNonHomeView();
-}
-
 function showGameView(v: PlayerView): void {
   gameView.render(v);
   gameView.mount();
@@ -174,29 +168,17 @@ bus.on(EVENTS.UI_JOIN_ROOM, async (qrData: string) => {
   isHost = false;
   p2p = new P2PManager();
   room = await p2p.joinFromOffer(qrData);
-  await p2p.getGuestQrImage(); // generate answer QR in background
-  lobbyPlayers = [{ name: '主持人', isHost: true }, { name: '你', isHost: false, status: '正在连接' }];
-  showWaitRoom();
+  const answerImg = await p2p.getGuestQrImage();
+  lobbyView.showGuestQr(room, answerImg);
+  lobbyView.mount();
+  showNonHomeView();
 
   p2p.onMessage((_peerId, data) => {
     const d = data as { type: string; payload: unknown };
-    if (d.type === 'assign') {
-      myIdx = (d.payload as { playerIndex: number }).playerIndex;
-      ToastManager.show(`你已加入 - 位置 ${myIdx + 1}`);
-      lobbyPlayers = [{ name: '主持人', isHost: true }, { name: '你', isHost: false, status: '已连接' }];
-      showWaitRoom();
-    } else if (d.type === 'lobby') {
-      const plist = (d.payload as { players: { name: string; isHost: boolean }[] }).players;
-      if (plist) {
-        lobbyPlayers = plist.map((p, i) => ({ name: p.name, isHost: p.isHost, status: p.isHost ? '' : i === myIdx ? '已连接' : '正在连接' }));
-        showWaitRoom();
-      }
-    } else if (d.type === 'state') {
+    if (d.type === 'state') {
       const view = d.payload as PlayerView;
       myIdx = view.playerIndex;
       showGameView(view);
-    } else if (d.type === 'error') {
-      ToastManager.show('无效操作');
     }
   });
 });
