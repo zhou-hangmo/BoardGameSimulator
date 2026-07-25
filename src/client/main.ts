@@ -283,7 +283,7 @@ bus.on(EVENTS.UI_LEAVE_ROOM, () => {
 // 显示游戏详情
 bus.on('ui:show_game_detail', (gameId: string) => {
   const g = installedGames.find(x => x.id === gameId);
-  if (g) lobbyView.showGameDetail(g.name, g.description, g.playerCount, g.id);
+  if (g) { lobbyView.showGameDetail(g.name, g.description, g.playerCount, g.id); lobbyView.mount(); showNonHomeView(); }
 });
 
 // 回到首页
