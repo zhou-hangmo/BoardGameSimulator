@@ -205,18 +205,29 @@ bus.on(EVENTS.UI_JOIN_ROOM, async (qrData: string) => {
 bus.on(EVENTS.UI_SCAN_GUEST, async (qrData: string) => {
   if (!p2p || !isHost) return;
   const pid = await p2p.acceptGuestAnswer(qrData);
-  const ready = await p2p.waitForDcOpen(pid, 10000);
-  if (!ready) { ToastManager.show('连接超时'); return; }
   const idx = p2p.getPeerCount();
-  lobbyPlayers.push({ name: `玩家 ${idx}`, isHost: false, status: '已连接' });
+  lobbyPlayers.push({ name: `玩家 ${idx}`, isHost: false, status: '正在连接' });
   showLobby();
-  p2p.sendRaw(pid, 'assign', { playerIndex: idx });
-  const plist: { name: string; isHost: boolean }[] = [
-    { name: '你', isHost: true },
-    ...p2p.getPeerIds().map((_, i) => ({ name: `玩家 ${i + 1}`, isHost: false })),
-  ];
-  p2p.sendRaw(pid, 'lobby', { players: plist });
-  ToastManager.show('玩家已连接');
+  // 异步等待 DC 打开（不阻塞扫码器关闭）
+  p2p.waitForDcOpen(pid, 10000).then(ready => {
+    if (!ready) {
+      const p = lobbyPlayers.find(x => !x.isHost && x.status === '正在连接');
+      if (p) p.status = '连接超时';
+      showLobby();
+      ToastManager.show('连接超时');
+      return;
+    }
+    const p = lobbyPlayers.find(x => !x.isHost && x.status === '正在连接');
+    if (p) p.status = '已连接';
+    showLobby();
+    p2p!.sendRaw(pid, 'assign', { playerIndex: idx });
+    const plist: { name: string; isHost: boolean }[] = [
+      { name: '你', isHost: true },
+      ...p2p!.getPeerIds().map((_, i) => ({ name: `玩家 ${i + 1}`, isHost: false })),
+    ];
+    p2p!.sendRaw(pid, 'lobby', { players: plist });
+    ToastManager.show('玩家已连接');
+  });
 });
 
 // 出牌/动作
