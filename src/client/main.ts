@@ -37,7 +37,7 @@ let p2p: P2PManager | null = null;
 let myIdx = 0;
 let isHost = false;
 let room = '';
-let lobbyPlayers: { name: string; isHost: boolean }[] = [];
+let lobbyPlayers: { name: string; isHost: boolean; status?: string }[] = [];
 let lobbyQrImg = '';
 
 const installedGames: GameMeta[] = [{
@@ -174,17 +174,23 @@ bus.on(EVENTS.UI_JOIN_ROOM, async (qrData: string) => {
   isHost = false;
   p2p = new P2PManager();
   room = await p2p.joinFromOffer(qrData);
-  const answerImg = await p2p.getGuestQrImage();
-  lobbyView.showGuestQr(room, answerImg);
+  await p2p.getGuestQrImage(); // generate answer QR in background
+  lobbyPlayers = [{ name: '主持人', isHost: true }, { name: '你', isHost: false, status: '正在连接' }];
+  showWaitRoom();
 
   p2p.onMessage((_peerId, data) => {
     const d = data as { type: string; payload: unknown };
     if (d.type === 'assign') {
       myIdx = (d.payload as { playerIndex: number }).playerIndex;
       ToastManager.show(`你已加入 - 位置 ${myIdx + 1}`);
+      lobbyPlayers = [{ name: '主持人', isHost: true }, { name: '你', isHost: false, status: '已连接' }];
+      showWaitRoom();
     } else if (d.type === 'lobby') {
       const plist = (d.payload as { players: { name: string; isHost: boolean }[] }).players;
-      if (plist) showWaitRoom();
+      if (plist) {
+        lobbyPlayers = plist.map((p, i) => ({ name: p.name, isHost: p.isHost, status: p.isHost ? '' : i === myIdx ? '已连接' : '正在连接' }));
+        showWaitRoom();
+      }
     } else if (d.type === 'state') {
       const view = d.payload as PlayerView;
       myIdx = view.playerIndex;
@@ -202,7 +208,7 @@ bus.on(EVENTS.UI_SCAN_GUEST, async (qrData: string) => {
   const ready = await p2p.waitForDcOpen(pid, 10000);
   if (!ready) { ToastManager.show('连接超时'); return; }
   const idx = p2p.getPeerCount();
-  lobbyPlayers.push({ name: `玩家 ${idx}`, isHost: false });
+  lobbyPlayers.push({ name: `玩家 ${idx}`, isHost: false, status: '已连接' });
   showLobby();
   p2p.sendRaw(pid, 'assign', { playerIndex: idx });
   const plist: { name: string; isHost: boolean }[] = [

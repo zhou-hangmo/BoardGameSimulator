@@ -7,6 +7,7 @@ import { el, qs, qso } from '../utils/dom';
 export interface PlayerInfo {
   name: string;
   isHost: boolean;
+  status?: string;
 }
 
 export class LobbyView extends BaseView {
@@ -110,7 +111,7 @@ export class LobbyView extends BaseView {
 
   private buildPlayerRows(players: PlayerInfo[]): string {
     return players.map(p =>
-      `<div class="player-row"><span class="dot green"></span>${p.name}${p.isHost ? ' (主持人)' : ''}</div>`
+      `<div class="player-row"><span class="dot green"></span>${p.name}${p.isHost ? ' (主持人)' : ''}<span style="margin-left:auto;font-size:12px;color:var(--label3)">${p.status || ''}</span></div>`
     ).join('');
   }
 
