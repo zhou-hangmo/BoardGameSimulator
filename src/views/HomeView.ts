@@ -221,7 +221,7 @@ export class HomeView extends BaseView {
     window.addEventListener('mousemove', (e: MouseEvent) => onMove(e.clientY));
     window.addEventListener('mouseup', () => onUp());
     document.addEventListener('wheel', (e: WheelEvent) => {
-      if (hasKeyboard() || (e.target as Element)?.closest('.scroll')) return;
+      if (!this.el.isConnected || hasKeyboard() || (e.target as Element)?.closest('.scroll')) return;
       e.preventDefault();
       if (e.deltaY > 0 && !this.open) this.snap(true);
       else if (e.deltaY < 0 && this.open) this.snap(false);
