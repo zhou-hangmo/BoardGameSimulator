@@ -48,7 +48,7 @@ export class LobbyView extends BaseView {
   private buildLobbyHtml(code: string, players: PlayerInfo[], qrImg: string): string {
     return `
       <div class="nav-bar"><span class="nav-title">房间大厅</span></div>
-      <div class="scroll" style="flex:1;min-height:0">
+       <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
         <div class="sec-body">
           <div class="room-code">
             <div class="code">${code}</div>
@@ -70,7 +70,7 @@ export class LobbyView extends BaseView {
   private buildWaitHtml(code: string, players: PlayerInfo[]): string {
     return `
       <div class="nav-bar"><span class="nav-title">等待开局</span></div>
-      <div class="scroll" style="flex:1;min-height:0">
+       <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
         <div class="sec-body">
           <div class="room-code"><div class="code">${code}</div></div>
           <div class="section-hdr">已加入玩家</div>
@@ -83,7 +83,7 @@ export class LobbyView extends BaseView {
   private buildGuestQrHtml(code: string, qrImg: string): string {
     return `
       <div class="nav-bar"><span class="nav-title">请主持人扫码</span></div>
-      <div class="scroll" style="flex:1;min-height:0">
+       <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
         <div class="sec-body" style="text-align:center;">
           <div class="room-code"><div class="code">${code}</div></div>
           <img src="${qrImg}" style="width:280px;height:280px;max-width:90vw;border-radius:12px;" />
@@ -95,7 +95,7 @@ export class LobbyView extends BaseView {
   private buildGameDetailHtml(gameName: string, description: string, playerCount: string): string {
     return `
       <div class="nav-bar"><span class="nav-title">${gameName}</span></div>
-      <div class="scroll" style="flex:1;min-height:0">
+       <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
         <div class="sec-body">
           <div class="section-hdr">游戏详情</div>
           <div class="cell">
