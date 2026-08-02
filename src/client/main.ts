@@ -7,11 +7,13 @@ import '../components/PlayerRow';
 import { GameEngine } from '../core/engine';
 import { P2PManager } from '../core/p2p';
 import { bus } from '../utils/EventBus';
+import { Logger } from '../utils/Logger';
 import { ToastManager } from '../views/ToastView';
 import { HomeView, type GameMeta } from '../views/HomeView';
 import { LobbyView } from '../views/LobbyView';
 import { GameView } from '../views/GameView';
 import { ScannerView } from '../views/ScannerView';
+import { logView } from '../views/LogView';
 import { EVENTS } from '../utils/messages';
 
 import type { GameState, GameAction, GameConfig, PlayerView } from '../core/types';
@@ -45,6 +47,11 @@ const installedGames: GameMeta[] = [{
   playerCount: '3', cardCount: 54, tags: ['卡牌', '回合制'], ready: true,
   config: doudizhuConfig as GameConfig,
 }];
+
+// 网络环境信息
+const nav = navigator as any;
+Logger.log('NET', `online=${navigator.onLine}, IP6=${!!nav.connection?.effectiveType}, type=${nav.connection?.effectiveType || '?'}`);
+Logger.log('NET', `IPv6 stack: ${window.location.protocol.includes('https') ? 'checking...' : 'N/A'}`);
 
 // ========== 视图管理 ==========
 function showHome(): void {
@@ -137,6 +144,7 @@ bus.on(EVENTS.UI_CREATE_ROOM, async (gameId: string) => {
 
   lobbyPlayers = [{ name: '你', isHost: true }];
   lobbyQrImg = await p2p.getHostQrImage();
+  Logger.log('APP', `createRoom: room=${room}, QR size=${lobbyQrImg.length} chars`);
   showLobby();
 
   p2p.onAction(async (action: GameAction) => {
@@ -168,6 +176,7 @@ bus.on(EVENTS.UI_JOIN_ROOM, async (qrData: string) => {
   isHost = false;
   p2p = new P2PManager();
   room = await p2p.joinFromOffer(qrData);
+  Logger.log('APP', `joinRoom: room=${room}`);
   const answerImg = await p2p.getGuestQrImage();
   lobbyView.showGuestQr(room, answerImg);
   lobbyView.mount();
@@ -187,6 +196,7 @@ bus.on(EVENTS.UI_JOIN_ROOM, async (qrData: string) => {
 bus.on(EVENTS.UI_SCAN_GUEST, async (qrData: string) => {
   if (!p2p || !isHost) return;
   const pid = await p2p.acceptGuestAnswer(qrData);
+  Logger.log('APP', `scanGuest: pid=${pid}`);
   const idx = p2p.getPeerCount();
   lobbyPlayers.push({ name: `玩家 ${idx}`, isHost: false, status: '正在连接' });
   showLobby();
@@ -270,6 +280,9 @@ bus.on('ui:show_game_detail', (gameId: string) => {
 
 // 回到首页
 bus.on('ui:go_home', () => showHome());
+
+// 打开日志
+bus.on('ui:show_log', () => logView.show());
 
 // 打开扫描器
 bus.on('ui:open_scanner', (cb: (data: unknown) => void) => {

@@ -1,4 +1,4 @@
-import{e as d,c as g,a as m}from"./webrtc-Nfv4tQMH.js";const u=document.getElementById("out"),i=document.getElementById("status"),t=(n,a)=>{u.innerHTML+=`<span class="${n}">${a}</span>
+import{e as d,c as g,a as m}from"./webrtc-Bg_IF7zl.js";const u=document.getElementById("out"),i=document.getElementById("status"),t=(n,a)=>{u.innerHTML+=`<span class="${n}">${a}</span>
 `};function f(n){return new Promise(a=>{n.iceGatheringState==="complete"?a():(n.onicegatheringstatechange=()=>{n.iceGatheringState==="complete"&&a()},setTimeout(a,3e3))})}async function S(){i.textContent="Step 1/5",t("step","=== Step 1: 生成原生 offer + 等待 ICE ===");const n=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});n.createDataChannel("game");const a=await n.createOffer();await n.setLocalDescription(a),await f(n);const r=n.localDescription.sdp;t("ok","✅ 原生 offer (长度 "+r.length+")"),t("s","--- 原始 SDP ---"),t("",r),t("s","--- SDP 中 candidate 行 ---"),r.split(`
 `).filter(e=>e.startsWith("a=candidate")).forEach(e=>t("",e)),t("s",`候选行总计: ${r.split(`
 `).filter(e=>e.startsWith("a=candidate")).length}`),i.textContent="Step 2/5",t("step",`

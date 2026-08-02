@@ -63,6 +63,7 @@ export class LobbyView extends BaseView {
           <button id="btn-start" class="btn btn-primary btn-block" style="margin-top:16px;" ${players.length < 2 ? 'disabled' : ''}>开始游戏</button>
           <button id="btn-share" class="btn btn-secondary btn-block" style="margin-top:8px;">📤 分享房间</button>
           <button id="btn-scan-guest" class="btn btn-secondary btn-block" style="margin-top:4px;">📷 扫访客码</button>
+          <button id="btn-log" class="btn btn-secondary btn-block" style="margin-top:4px;font-size:13px;">📋 记录</button>
         </div>
       </div>`;
   }
@@ -127,6 +128,9 @@ export class LobbyView extends BaseView {
       this.emit('ui:open_scanner', (data: unknown) => {
         this.emit('ui:scan_guest', JSON.stringify(data));
       });
+    });
+    qso('#btn-log', this.el)?.addEventListener('pointerdown', () => {
+      this.emit('ui:show_log');
     });
   }
 }

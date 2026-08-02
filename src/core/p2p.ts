@@ -2,6 +2,7 @@
 import type { GameAction, PlayerView, ErrorResponse } from './types';
 import { hostCreateOffer, hostAcceptAnswer, guestCreateAnswer, extractFields, sendJson, type Connection, type SdpFields } from './webrtc';
 import { encodeQR } from './qrcode';
+import { Logger } from '../utils/Logger';
 
 type MsgCb = (fromPeerId: string, data: unknown) => void;
 
@@ -61,6 +62,7 @@ export class P2PManager {
   sendRaw(peerId: string, type: string, payload: unknown) {
     const conn = this.conns.get(peerId);
     if (conn?.dc?.readyState === 'open') sendJson(conn, { type, payload });
+    else Logger.log('P2P', `sendRaw(${peerId}) blocked: dc=${conn?.dc?.readyState || 'nonexistent'}, type=${type}`);
   }
 
   broadcastRaw(type: string, payload: unknown) {
@@ -79,11 +81,13 @@ export class P2PManager {
 
   async waitForDcOpen(peerId: string, timeoutMs = 10000): Promise<boolean> {
     const conn = this.conns.get(peerId);
-    if (!conn) return false;
-    if (conn.dc?.readyState === 'open') return true;
+    if (!conn) { Logger.log('P2P', `waitForDcOpen(${peerId}): conn not found`); return false; }
+    if (conn.dc?.readyState === 'open') { Logger.log('P2P', `waitForDcOpen(${peerId}): already open`); return true; }
+    Logger.log('P2P', `waitForDcOpen(${peerId}): waiting (timeout=${timeoutMs}ms)...`);
+    const start = Date.now();
     return new Promise(resolve => {
-      const onOpen = () => { resolve(true); };
-      const timer = setTimeout(() => { resolve(false); }, timeoutMs);
+      const onOpen = () => { Logger.log('P2P', `waitForDcOpen(${peerId}): ✅ opened after ${Date.now() - start}ms`); resolve(true); };
+      const timer = setTimeout(() => { Logger.log('P2P', `waitForDcOpen(${peerId}): ❌ timeout after ${Date.now() - start}ms`); resolve(false); }, timeoutMs);
       const prev = conn.onDcOpen;
       conn.onDcOpen = () => { clearTimeout(timer); prev?.(); onOpen(); };
     });
