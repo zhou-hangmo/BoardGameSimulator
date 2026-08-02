@@ -33,6 +33,9 @@ export class LobbyView extends BaseView {
   /** 显示客人 QR 码 */
   showGuestQr(code: string, qrImg: string): void {
     this.el.innerHTML = this.buildGuestQrHtml(code, qrImg);
+    qso('#btn-log-guest', this.el)?.addEventListener('pointerdown', () => {
+      this.emit('ui:show_log');
+    });
   }
 
   /** 显示游戏详情（创建房间前） */
@@ -84,11 +87,12 @@ export class LobbyView extends BaseView {
   private buildGuestQrHtml(code: string, qrImg: string): string {
     return `
       <div class="nav-bar"><span class="nav-title">请主持人扫码</span></div>
-       <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
+      <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
         <div class="sec-body" style="text-align:center;">
           <div class="room-code"><div class="code">${code}</div></div>
           <img src="${qrImg}" style="width:280px;height:280px;max-width:90vw;border-radius:12px;" />
           <div style="color:var(--label3);font-size:13px;margin-top:8px;">请让主持人扫描此码完成连接</div>
+          <button id="btn-log-guest" class="btn btn-secondary btn-block" style="margin-top:8px;">📋 记录</button>
         </div>
       </div>`;
   }
