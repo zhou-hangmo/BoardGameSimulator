@@ -23,7 +23,7 @@ export interface PlayerState {
   handCount: number;    // 冗余字段（便于PlayerView中不暴露手牌时仍显示数量）
   isHost: boolean;
   isDisconnected: boolean;
-  extra?: Record<string, number | string>; // 如HP、金币等
+  extra?: Record<string, unknown>; // 如HP、金币、棋盘数据等
 }
 
 export interface PlayerViewData {
@@ -32,7 +32,7 @@ export interface PlayerViewData {
   hand: Card[] | { count: number };  // 按visibility配置返回完整手牌或仅数量
   handCount: number;
   isDisconnected: boolean;
-  extra?: Record<string, number | string>;
+  extra?: Record<string, unknown>;
 }
 
 // ---------- 游戏状态 ----------
@@ -56,6 +56,7 @@ export interface GameState {
   lastPlay: PlayInfo | null;
   passCount: number;
   winner: number | null;
+  extra?: unknown; // 游戏自定义数据（如海战棋盘）
 }
 
 // ---------- 玩家视图（过滤后发送给各玩家） ----------

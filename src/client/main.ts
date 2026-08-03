@@ -18,6 +18,7 @@ import { EVENTS } from '../utils/messages';
 
 import type { GameState, GameAction, GameConfig, PlayerView } from '../core/types';
 import battleshipConfig from '../games/battleship/config.json';
+import { l3Script } from '../games/battleship/l3';
 
 // ========== 全局状态 ==========
 const app = document.getElementById('app')!;
@@ -45,7 +46,7 @@ let lobbyQrImg = '';
 const installedGames: GameMeta[] = [{
   id: 'battleship', name: '海战棋', description: '双人策略海战',
   playerCount: '2', tags: ['策略', '回合制'], ready: true,
-  config: battleshipConfig as GameConfig,
+  config: { ...battleshipConfig, l3: l3Script } as GameConfig,
 }];
 
 // 网络环境信息

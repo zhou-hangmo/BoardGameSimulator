@@ -3,6 +3,10 @@
 // ============================================================
 
 import type { GameState, GameAction } from './types';
+import {
+  initBoards, placeShip, randomPlace, fire,
+  type BattleshipExtra,
+} from '../games/battleship/rules';
 
 /**
  * 主 Reducer：接收当前状态和 Action，返回新状态。
@@ -18,6 +22,12 @@ export function reducer(state: GameState, action: GameAction): GameState {
       return handlePlayCards(state, action);
     case 'pass':
       return handlePass(state, action);
+    case 'battleship_place':
+      return handleBattleshipPlace(state, action);
+    case 'battleship_random':
+      return handleBattleshipRandom(state, action);
+    case 'battleship_fire':
+      return handleBattleshipFire(state, action);
     default:
       return state; // 未知 action，原样返回
   }
@@ -120,4 +130,60 @@ function handlePass(state: GameState, action: GameAction): GameState {
     currentTurn: nextTurn,
     passCount: state.passCount + 1,
   };
+}
+
+// ---------- 海战棋 ----------
+
+function ensureExtra(state: GameState): BattleshipExtra {
+  const extra = state.extra as BattleshipExtra | undefined;
+  if (extra && Array.isArray(extra.boards)) return extra;
+  return initBoards(state.players.length || 2);
+}
+
+function applyExtra(state: GameState, extra: BattleshipExtra): GameState {
+  return {
+    ...state,
+    version: state.version + 1,
+    extra,
+    phase: extra.stage === 'battle' ? 'playing' : state.phase,
+  };
+}
+
+function handleBattleshipPlace(state: GameState, action: GameAction): GameState {
+  if (state.phase === 'ended') return state; // 拒绝：返回原引用
+  const payload = action.payload as { shipId: string; cells: string[] } | undefined;
+  if (!payload || typeof payload.shipId !== 'string' || !Array.isArray(payload.cells)) return state;
+
+  const r = placeShip(ensureExtra(state), action.playerIndex, payload.shipId, payload.cells);
+  if (!r.ok) return state;
+  return applyExtra(state, r.extra);
+}
+
+function handleBattleshipRandom(state: GameState, action: GameAction): GameState {
+  if (state.phase === 'ended') return state;
+
+  const r = randomPlace(ensureExtra(state), action.playerIndex);
+  if (!r.ok) return state;
+  return applyExtra(state, r.extra);
+}
+
+function handleBattleshipFire(state: GameState, action: GameAction): GameState {
+  const extra = state.extra as BattleshipExtra | undefined;
+  if (!extra || extra.stage !== 'battle') return state; // 拒绝：返回原引用
+  if (state.phase !== 'playing' || action.playerIndex !== state.currentTurn) return state;
+
+  const payload = action.payload as { cell: string } | undefined;
+  if (!payload || typeof payload.cell !== 'string') return state;
+
+  const r = fire(extra, action.playerIndex, payload.cell);
+  if (!r.ok) return state;
+
+  const next: GameState = { ...state, version: state.version + 1, extra: r.extra };
+  if (r.result.winner !== null) {
+    next.phase = 'ended';
+    next.winner = r.result.winner;
+  } else {
+    next.currentTurn = (state.currentTurn + 1) % state.players.length;
+  }
+  return next;
 }

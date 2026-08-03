@@ -131,6 +131,12 @@ export class GameEngine {
     });
   }
 
+  // 调用 L3 注册的自定义函数（state 会自动作为首个参数传入）
+  query(name: string, ...args: unknown[]): Promise<unknown> {
+    if (!this.worker || !this.workerReady) return Promise.resolve(undefined);
+    return this.callWorker('query', name, args);
+  }
+
   // ========== 状态管理 ==========
 
   getState(): GameState {
