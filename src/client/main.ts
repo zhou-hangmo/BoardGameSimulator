@@ -1,30 +1,40 @@
 // ============================================================
 // BoardGameSimulator — 应用入口（EventBus 驱动）
+// 测试模式：?test=1&game=<id>&role=host|guest（仅 dev 生效）
 // ============================================================
 import '../components/GameCard';
 import '../components/PlayerRow';
 
 import { GameEngine } from '../core/engine';
 import { P2PManager } from '../core/p2p';
+import { TestP2P } from '../core/testP2p';
 import { bus } from '../utils/EventBus';
 import { Logger } from '../utils/Logger';
 import { ToastManager } from '../views/ToastView';
 import { HomeView, type GameMeta } from '../views/HomeView';
-import { LobbyView } from '../views/LobbyView';
+import { LobbyView, type PlayerInfo } from '../views/LobbyView';
 import { GameView } from '../views/GameView';
 import { ScannerView } from '../views/ScannerView';
+import { SpectatorView, type SpectateData } from '../views/SpectatorView';
 import { logView } from '../views/LogView';
 import { EVENTS } from '../utils/messages';
 
 import type { GameState, GameAction, GameConfig, PlayerView } from '../core/types';
-import battleshipConfig from '../games/battleship/config.json';
-import { l3Script } from '../games/battleship/l3';
+import { findTestModule } from '../test/registry';
+import { battleshipTest } from '../games/battleship/test';
+
+// ========== 测试模式判定 ==========
+const params = new URLSearchParams(location.search);
+const TEST = import.meta.env.DEV && params.get('test') !== null;
+const TEST_ROLE = (params.get('role') ?? 'host') as 'host' | 'guest';
+const TEST_GAME = params.get('game') ?? 'battleship';
 
 // ========== 全局状态 ==========
 const app = document.getElementById('app')!;
 const homeView = new HomeView(app, () => installedGames);
 const lobbyView = new LobbyView(app);
 const gameView = new GameView(app);
+const spectatorView = new SpectatorView(app);
 const scanner = new ScannerView();
 
 // 全局悬浮 home 按钮（始终可见）
@@ -36,23 +46,25 @@ globalHomeBtn.addEventListener('click', () => showHome());
 document.body.appendChild(globalHomeBtn);
 
 let engine: GameEngine | null = null;
-let p2p: P2PManager | null = null;
+let p2p: P2PManager | TestP2P | null = null;
 let myIdx = 0;
 let isHost = false;
 let room = '';
-let lobbyPlayers: { name: string; isHost: boolean; status?: string }[] = [];
+let gameNeeds = 2;
+let lobbyPlayers: PlayerInfo[] = [];
 let lobbyQrImg = '';
 
 const installedGames: GameMeta[] = [{
-  id: 'battleship', name: '海战棋', description: '双人策略海战',
+  id: battleshipTest.id, name: battleshipTest.name, description: '双人策略海战',
   playerCount: '2', tags: ['策略', '回合制'], ready: true,
-  config: { ...battleshipConfig, l3: l3Script } as GameConfig,
+  config: battleshipTest.config,
 }];
 
 // 网络环境信息
 const nav = navigator as any;
 Logger.log('NET', `online=${navigator.onLine}, IP6=${!!nav.connection?.effectiveType}, type=${nav.connection?.effectiveType || '?'}`);
 Logger.log('NET', `IPv6 stack: ${window.location.protocol.includes('https') ? 'checking...' : 'N/A'}`);
+if (TEST) Logger.log('APP', `测试模式: game=${TEST_GAME} role=${TEST_ROLE}`);
 
 // ========== 视图管理 ==========
 function showHome(): void {
@@ -65,7 +77,7 @@ function showNonHomeView(): void {
 }
 
 function showLobby(): void {
-  lobbyView.showLobby(room, lobbyPlayers, lobbyQrImg);
+  lobbyView.showLobby(room, lobbyPlayers, lobbyQrImg, gameNeeds);
   lobbyView.mount();
   showNonHomeView();
 }
@@ -76,9 +88,14 @@ function showGameView(v: PlayerView): void {
   showNonHomeView();
 }
 
+function createP2P(): P2PManager | TestP2P {
+  return TEST ? new TestP2P(TEST_ROLE) : new P2PManager();
+}
+
 function broadcastGame(): void {
   if (!engine || !isHost || !p2p) return;
   const state = engine.getState();
+  const extra = state.extra as { log?: SpectateData['log'] } | undefined;
   for (let i = 0; i < state.players.length; i++) {
     const v = engine.buildPlayerView(i);
     if (i === 0) {
@@ -88,6 +105,85 @@ function broadcastGame(): void {
       if (pid) p2p.sendPlayerView(pid, v);
     }
   }
+  // 观战者（有效玩家之后的 peer）
+  const pids = p2p.getPeerIds();
+  const spectate: SpectateData = {
+    phase: state.phase,
+    currentTurn: state.currentTurn,
+    winner: state.winner,
+    log: extra?.log ?? [],
+  };
+  for (let i = state.players.length - 1; i < pids.length; i++) {
+    p2p.sendRaw(pids[i], 'spectate', spectate);
+  }
+}
+
+// ========== 连接流程（真实 / 测试共用） ==========
+
+async function doJoinRoom(qrData: string): Promise<void> {
+  isHost = false;
+  if (!p2p) p2p = createP2P();
+  room = await p2p.joinFromOffer(qrData);
+  Logger.log('APP', `joinRoom: room=${room}`);
+  const answerImg = await p2p.getGuestQrImage();
+  if (TEST) {
+    lobbyView.showWaitRoom(room, []);
+  } else {
+    lobbyView.showGuestQr(room, answerImg);
+  }
+  lobbyView.mount();
+  showNonHomeView();
+
+  p2p.onMessage((_peerId, data) => {
+    const d = data as { type: string; payload: unknown };
+    if (d.type === 'state') {
+      const view = d.payload as PlayerView;
+      myIdx = view.playerIndex;
+      showGameView(view);
+    } else if (d.type === 'assign') {
+      const a = d.payload as { playerIndex: number; spectator?: boolean };
+      myIdx = a.playerIndex;
+    } else if (d.type === 'lobby') {
+      const l = d.payload as { players: PlayerInfo[] };
+      lobbyView.showWaitRoom(room, l.players ?? []);
+      lobbyView.mount();
+    } else if (d.type === 'spectate') {
+      spectatorView.render(d.payload as SpectateData);
+      spectatorView.mount();
+      showNonHomeView();
+    }
+  });
+}
+
+async function doScanGuest(qrData: string): Promise<void> {
+  if (!p2p || !isHost) return;
+  const pid = await p2p.acceptGuestAnswer(qrData);
+  Logger.log('APP', `scanGuest: pid=${pid}`);
+  const validCount = lobbyPlayers.filter(p => !p.isIdle && !p.isSpectator).length;
+  const isPlayer = validCount < gameNeeds;
+  if (isPlayer) {
+    lobbyPlayers.push({ name: `玩家 ${validCount}`, isHost: false, status: '正在连接' });
+  } else {
+    lobbyPlayers.push({ name: `玩家 ${validCount + 1}`, isHost: false, isIdle: true, canSpectate: true, status: '已连接' });
+  }
+  showLobby();
+  // 异步等待 DC 打开（不阻塞扫码器关闭）
+  p2p.waitForDcOpen(pid, 10000).then(ready => {
+    if (!ready) {
+      const p = lobbyPlayers.find(x => !x.isHost && x.status === '正在连接');
+      if (p) p.status = '连接超时';
+      showLobby();
+      ToastManager.show('连接超时');
+      return;
+    }
+    const p = lobbyPlayers.find(x => !x.isHost && x.status === '正在连接');
+    if (p) p.status = '已连接';
+    showLobby();
+    p2p!.sendRaw(pid, 'assign', { playerIndex: isPlayer ? validCount : -1, spectator: !isPlayer });
+    const plist: PlayerInfo[] = lobbyPlayers.map(x => ({ name: x.name, isHost: x.isHost, isSpectator: x.isSpectator }));
+    p2p!.sendRaw(pid, 'lobby', { players: plist });
+    ToastManager.show(isPlayer ? '玩家已连接' : '已满员，等待观战');
+  });
 }
 
 // ========== EventBus 绑定 ==========
@@ -123,12 +219,13 @@ bus.on(EVENTS.UI_IMPORT_GAME, async () => {
 
 // 创建房间
 bus.on(EVENTS.UI_CREATE_ROOM, async (gameId: string) => {
-  const g = installedGames.find(x => x.id === gameId);
+  const g = installedGames.find(x => x.id === gameId) ?? findTestModule(gameId);
   if (!g?.config) { ToastManager.show('配置加载中'); return; }
 
   isHost = true; myIdx = 0;
-  p2p = new P2PManager();
+  p2p = createP2P();
   room = await p2p.createRoom();
+  gameNeeds = (g.config as GameConfig).meta.maxPlayers;
 
   const s0: GameState = {
     version: 0, players: [], deck: [], discard: [], bottomCards: [],
@@ -145,7 +242,7 @@ bus.on(EVENTS.UI_CREATE_ROOM, async (gameId: string) => {
 
   lobbyPlayers = [{ name: '你', isHost: true }];
   lobbyQrImg = await p2p.getHostQrImage();
-  Logger.log('APP', `createRoom: room=${room}, QR size=${lobbyQrImg.length} chars`);
+  Logger.log('APP', `createRoom: room=${room}, test=${TEST}`);
   showLobby();
 
   p2p.onAction(async (action: GameAction) => {
@@ -153,74 +250,50 @@ bus.on(EVENTS.UI_CREATE_ROOM, async (gameId: string) => {
     const err = await engine.dispatch(action);
     if (err) {
       const pid = p2p!.getPeerIds()[action.playerIndex - 1];
-      if (pid) p2p!.sendError(pid, err);
+      if (pid && pid !== undefined) p2p!.sendError(pid, err);
       return;
     }
     broadcastGame();
   });
+
+  if (TEST) {
+    (p2p as TestP2P).onAnswer((ans: string) => { void doScanGuest(ans); });
+  }
 });
 
-// 开始游戏
+// 开始游戏（有效玩家数达到上限才可开）
 bus.on(EVENTS.UI_START_GAME, () => {
   if (!engine || !isHost || !p2p) return;
-  const needs = (battleshipConfig as GameConfig).meta.maxPlayers;
-  if (p2p.getPeerCount() + 1 < needs) {
-    ToastManager.show(`需要至少 ${needs} 人`);
+  const valid = lobbyPlayers.filter(p => !p.isIdle && !p.isSpectator).length;
+  if (valid < gameNeeds) {
+    ToastManager.show(`需要至少 ${gameNeeds} 名玩家`);
     return;
   }
-  engine.startGame(p2p.getPeerCount() + 1);
+  engine.startGame(valid);
   broadcastGame();
 });
 
 // 加入房间
 bus.on(EVENTS.UI_JOIN_ROOM, async (qrData: string) => {
-  isHost = false;
-  p2p = new P2PManager();
-  room = await p2p.joinFromOffer(qrData);
-  Logger.log('APP', `joinRoom: room=${room}`);
-  const answerImg = await p2p.getGuestQrImage();
-  lobbyView.showGuestQr(room, answerImg);
-  lobbyView.mount();
-  showNonHomeView();
-
-  p2p.onMessage((_peerId, data) => {
-    const d = data as { type: string; payload: unknown };
-    if (d.type === 'state') {
-      const view = d.payload as PlayerView;
-      myIdx = view.playerIndex;
-      showGameView(view);
-    }
-  });
+  await doJoinRoom(qrData);
 });
 
 // 扫码访客
 bus.on(EVENTS.UI_SCAN_GUEST, async (qrData: string) => {
-  if (!p2p || !isHost) return;
-  const pid = await p2p.acceptGuestAnswer(qrData);
-  Logger.log('APP', `scanGuest: pid=${pid}`);
-  const idx = p2p.getPeerCount();
-  lobbyPlayers.push({ name: `玩家 ${idx}`, isHost: false, status: '正在连接' });
+  await doScanGuest(qrData);
+});
+
+// 空闲玩家 -> 观战（主持人操作）
+bus.on('ui:spectate_player', (name: string) => {
+  const p = lobbyPlayers.find(x => x.name === name);
+  if (!p || !p2p || !isHost) return;
+  p.isIdle = false;
+  p.canSpectate = false;
+  p.isSpectator = true;
   showLobby();
-  // 异步等待 DC 打开（不阻塞扫码器关闭）
-  p2p.waitForDcOpen(pid, 10000).then(ready => {
-    if (!ready) {
-      const p = lobbyPlayers.find(x => !x.isHost && x.status === '正在连接');
-      if (p) p.status = '连接超时';
-      showLobby();
-      ToastManager.show('连接超时');
-      return;
-    }
-    const p = lobbyPlayers.find(x => !x.isHost && x.status === '正在连接');
-    if (p) p.status = '已连接';
-    showLobby();
-    p2p!.sendRaw(pid, 'assign', { playerIndex: idx });
-    const plist: { name: string; isHost: boolean }[] = [
-      { name: '你', isHost: true },
-      ...p2p!.getPeerIds().map((_, i) => ({ name: `玩家 ${i + 1}`, isHost: false })),
-    ];
-    p2p!.sendRaw(pid, 'lobby', { players: plist });
-    ToastManager.show('玩家已连接');
-  });
+  const plist: PlayerInfo[] = lobbyPlayers.map(x => ({ name: x.name, isHost: x.isHost, isSpectator: x.isSpectator }));
+  for (const pid of p2p.getPeerIds()) p2p.sendRaw(pid, 'lobby', { players: plist });
+  ToastManager.show(`${p.name} 转为观战`);
 });
 
 // 出牌/动作
@@ -271,6 +344,9 @@ bus.on(EVENTS.UI_LEAVE_ROOM, () => {
   isHost = false;
   myIdx = 0;
   room = '';
+  gameNeeds = 2;
+  lobbyPlayers = [];
+  lobbyQrImg = '';
 });
 
 // 显示游戏详情
@@ -287,6 +363,10 @@ bus.on('ui:show_log', () => logView.show());
 
 // 打开扫描器
 bus.on('ui:open_scanner', (cb: (data: unknown) => void) => {
+  if (TEST) {
+    ToastManager.show('测试模式：免扫码自动连接');
+    return;
+  }
   scanner.start((data, done, retry) => {
     ToastManager.show('正在连接...');
     try {
@@ -302,4 +382,21 @@ bus.on('ui:open_scanner', (cb: (data: unknown) => void) => {
 });
 
 // ========== 启动 ==========
-showHome();
+if (TEST) {
+  const mod = findTestModule(TEST_GAME);
+  if (!mod) {
+    ToastManager.show(`未知测试游戏: ${TEST_GAME}`);
+    showHome();
+  } else if (TEST_ROLE === 'host') {
+    bus.emit(EVENTS.UI_CREATE_ROOM, mod.id);
+  } else {
+    isHost = false;
+    p2p = createP2P();
+    (p2p as TestP2P).onOffer((offer: string) => { void doJoinRoom(offer); });
+    lobbyView.showWaitRoom('--test--', []);
+    lobbyView.mount();
+    showNonHomeView();
+  }
+} else {
+  showHome();
+}

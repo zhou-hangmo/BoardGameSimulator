@@ -16,9 +16,17 @@ export interface BattleBoard {
   shots: Record<string, 'hit' | 'miss' | 'sunk'>;        // 对敌射击记录
 }
 
+export interface BattleLogEntry {
+  by: number;
+  cell: string;
+  result: 'hit' | 'miss' | 'sunk';
+  sunk: string | null;
+}
+
 export interface BattleshipExtra {
   stage: 'placement' | 'battle';
   boards: BattleBoard[];
+  log?: BattleLogEntry[];  // 公开开火日志（观战用）
 }
 
 export interface FireResult {

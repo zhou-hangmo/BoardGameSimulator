@@ -179,6 +179,11 @@ function handleBattleshipFire(state: GameState, action: GameAction): GameState {
   if (!r.ok) return state;
 
   const next: GameState = { ...state, version: state.version + 1, extra: r.extra };
+  const log = r.extra.log ?? [];
+  next.extra = {
+    ...r.extra,
+    log: [...log, { by: action.playerIndex, cell: payload.cell, result: r.result.result, sunk: r.result.sunk }].slice(-100),
+  };
   if (r.result.winner !== null) {
     next.phase = 'ended';
     next.winner = r.result.winner;

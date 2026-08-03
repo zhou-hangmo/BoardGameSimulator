@@ -255,6 +255,9 @@ describe('reducer 集成', () => {
     const r = reducer(s, { type: 'battleship_fire', playerIndex: 0, payload: { cell: 'A10' }, timestamp: 0 });
     expect(r).not.toBe(s);
     expect(r.currentTurn).toBe(1);
+    const log = (r.extra as BattleshipExtra).log;
+    expect(log).toHaveLength(1);
+    expect(log![0]).toEqual({ by: 0, cell: 'A10', result: 'hit', sunk: null });
   });
 
   it('非当前回合开火被拒绝', () => {
