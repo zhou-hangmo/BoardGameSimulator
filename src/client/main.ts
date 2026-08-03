@@ -17,7 +17,7 @@ import { logView } from '../views/LogView';
 import { EVENTS } from '../utils/messages';
 
 import type { GameState, GameAction, GameConfig, PlayerView } from '../core/types';
-import doudizhuConfig from '../games/doudizhu/config.json';
+import battleshipConfig from '../games/battleship/config.json';
 
 // ========== 全局状态 ==========
 const app = document.getElementById('app')!;
@@ -43,9 +43,9 @@ let lobbyPlayers: { name: string; isHost: boolean; status?: string }[] = [];
 let lobbyQrImg = '';
 
 const installedGames: GameMeta[] = [{
-  id: 'doudizhu', name: '斗地主', description: '经典三人扑克',
-  playerCount: '3', cardCount: 54, tags: ['卡牌', '回合制'], ready: true,
-  config: doudizhuConfig as GameConfig,
+  id: 'battleship', name: '海战棋', description: '双人策略海战',
+  playerCount: '2', tags: ['策略', '回合制'], ready: true,
+  config: battleshipConfig as GameConfig,
 }];
 
 // 网络环境信息
@@ -162,7 +162,7 @@ bus.on(EVENTS.UI_CREATE_ROOM, async (gameId: string) => {
 // 开始游戏
 bus.on(EVENTS.UI_START_GAME, () => {
   if (!engine || !isHost || !p2p) return;
-  const needs = (doudizhuConfig as GameConfig).meta.maxPlayers;
+  const needs = (battleshipConfig as GameConfig).meta.maxPlayers;
   if (p2p.getPeerCount() + 1 < needs) {
     ToastManager.show(`需要至少 ${needs} 人`);
     return;

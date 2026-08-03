@@ -1,0 +1,66 @@
+{
+  "meta": {
+    "name": "海战棋",
+    "version": "1.0",
+    "maxPlayers": 2
+  },
+  "l1": {
+    "cards": [
+      { "id": "ship_carrier",   "name": "航空母舰", "suit": "ship", "rank": "5", "value": 5, "extra": { "size": 5 } },
+      { "id": "ship_battleship","name": "战列舰",   "suit": "ship", "rank": "4", "value": 4, "extra": { "size": 4 } },
+      { "id": "ship_cruiser",   "name": "巡洋舰",   "suit": "ship", "rank": "3", "value": 3, "extra": { "size": 3 } },
+      { "id": "ship_submarine", "name": "潜艇",     "suit": "ship", "rank": "3", "value": 2, "extra": { "size": 3 } },
+      { "id": "ship_patrol",    "name": "巡逻艇",   "suit": "ship", "rank": "2", "value": 1, "extra": { "size": 2 } },
+      { "id": "cell_hit",       "name": "💥 命中",  "suit": "token", "rank": "H", "value": 0 },
+      { "id": "cell_miss",      "name": "💧 未命中","suit": "token", "rank": "M", "value": 0 },
+      { "id": "cell_empty",     "name": "🌊 未知",  "suit": "token", "rank": "E", "value": 0 }
+    ],
+    "players": {
+      "count": 2,
+      "initialResources": {}
+    },
+    "uiLayout": {
+      "slots": {
+        "top_bar":   { "component": "info_area" },
+        "main_area": { "component": "board_area" },
+        "bottom_bar":{ "component": "ship_area" }
+      },
+      "presetSlots": ["top_bar", "main_area", "bottom_bar"]
+    },
+    "visibility": {
+      "players[*].board":     { "mode": "owner_only", "description": "己方棋盘仅自己可见" },
+      "players[*].enemyView": { "mode": "owner_only", "description": "敌方视野仅自己可见" },
+      "players[*].ships":     { "mode": "owner_only", "description": "舰船部署仅自己可见" }
+    }
+  },
+  "l2": {
+    "rules": [
+      {
+        "trigger": "on_game_start",
+        "actions": [{ "type": "enter_placement" }]
+      },
+      {
+        "trigger": "on_placement_complete",
+        "actions": [{ "type": "enter_battle" }]
+      },
+      {
+        "trigger": "on_turn_start",
+        "actions": [{ "type": "wait_for_shot" }]
+      },
+      {
+        "trigger": "on_shot_fired",
+        "actions": [
+          { "type": "check_hit" },
+          { "type": "check_sunk" },
+          { "type": "check_win" },
+          { "type": "next_turn" }
+        ]
+      },
+      {
+        "trigger": "on_all_sunk",
+        "actions": [{ "type": "declare_winner" }]
+      }
+    ]
+  },
+  "l3": null
+}
