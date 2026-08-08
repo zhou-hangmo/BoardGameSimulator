@@ -79,6 +79,7 @@ export interface PlayerView {
   winner: number | null;
   players: PlayerViewData[];
   publicState: PublicState;
+  extra?: unknown; // 游戏自定义视图数据（如海战棋盘，已按玩家裁剪）
 }
 
 // ---------- 动作 ----------

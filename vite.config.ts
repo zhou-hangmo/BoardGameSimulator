@@ -22,7 +22,7 @@ export default defineConfig({
     target: 'es2020',
     sourcemap: false,
     rollupOptions: {
-      input: { main: 'index.html', diag: 'diag.html' },
+      input: { main: 'index.html', diag: 'diag.html', diag6: 'diag6.html' },
     },
   },
   server: {

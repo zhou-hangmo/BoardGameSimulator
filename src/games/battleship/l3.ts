@@ -23,12 +23,6 @@ function shipOf(board, shipId) {
   return board.ships.find(function (s) { return s.id === shipId; });
 }
 
-function overlaps(board, cells) {
-  return board.ships.some(function (s) {
-    return s.cells.some(function (c) { return cells.indexOf(c) >= 0; });
-  });
-}
-
 function validShape(cells) {
   if (!cells || cells.length === 0) return false;
   var pts = cells.map(parseCell);
@@ -55,10 +49,25 @@ function placeShip(state, playerIndex, shipId, cells) {
   if (!board) return { ok: false, error: '棋盘未初始化' };
   var ship = shipOf(board, shipId);
   if (!ship) return { ok: false, error: '未知舰船' };
-  if (ship.cells.length > 0) return { ok: false, error: '该舰已部署' };
   if (!cells || cells.length !== ship.size) return { ok: false, error: '长度不符' };
   if (!validShape(cells)) return { ok: false, error: '必须横/竖一条直线且连续' };
-  if (overlaps(board, cells)) return { ok: false, error: '与已有舰船重叠' };
+  var selfCells = ship.cells || [];
+  var otherCells = board.ships
+    .filter(function (s) { return s.id !== shipId; })
+    .reduce(function (acc, s) { return acc.concat(s.cells); }, []);
+  var conflict = cells.some(function (c) { return otherCells.indexOf(c) >= 0; });
+  if (conflict) return { ok: false, error: '与已有舰船重叠' };
+  return { ok: true };
+}
+
+function removeShip(state, playerIndex, shipId) {
+  var extra = state.extra;
+  if (!extra || extra.stage !== 'placement') return { ok: false, error: '当前不在布阵阶段' };
+  var board = boardOf(state, playerIndex);
+  if (!board) return { ok: false, error: '棋盘未初始化' };
+  var ship = shipOf(board, shipId);
+  if (!ship) return { ok: false, error: '未知舰船' };
+  if (!ship.cells || ship.cells.length === 0) return { ok: false, error: '该舰未部署' };
   return { ok: true };
 }
 
@@ -67,7 +76,17 @@ function randomPlace(state, playerIndex) {
   if (!extra || extra.stage !== 'placement') return { ok: false, error: '当前不在布阵阶段' };
   var board = boardOf(state, playerIndex);
   if (!board) return { ok: false, error: '棋盘未初始化' };
-  if (board.placed) return { ok: false, error: '该玩家已布阵完毕' };
+  if (board.placed && board.confirmed) return { ok: false, error: '该玩家已确认布阵' };
+  return { ok: true };
+}
+
+function confirmBoard(state, playerIndex) {
+  var extra = state.extra;
+  if (!extra || extra.stage !== 'placement') return { ok: false, error: '当前不在布阵阶段' };
+  var board = boardOf(state, playerIndex);
+  if (!board) return { ok: false, error: '棋盘未初始化' };
+  if (!board.placed) return { ok: false, error: '请先部署全部舰船' };
+  if (board.confirmed) return { ok: false, error: '已确认布阵' };
   return { ok: true };
 }
 
@@ -86,20 +105,26 @@ function fire(state, playerIndex, cell) {
 
 // ---------- 引擎自动调用的动作校验 ----------
 
-function validateAction(_oldState, newState, action) {
+function validateAction(oldState, _newState, action) {
   if (!action || typeof action !== 'object') return false;
   switch (action.type) {
     case 'start_game':
-      return newState.phase === 'idle';
+      return oldState.phase === 'idle';
     case 'battleship_place': {
       var p = action.payload || {};
-      return placeShip(newState, action.playerIndex, p.shipId, p.cells).ok;
+      return placeShip(oldState, action.playerIndex, p.shipId, p.cells).ok;
     }
     case 'battleship_random':
-      return randomPlace(newState, action.playerIndex).ok;
+      return randomPlace(oldState, action.playerIndex).ok;
+    case 'battleship_remove': {
+      var p = action.payload || {};
+      return removeShip(oldState, action.playerIndex, p.shipId).ok;
+    }
+    case 'battleship_confirm':
+      return confirmBoard(oldState, action.playerIndex).ok;
     case 'battleship_fire': {
       var p = action.payload || {};
-      return fire(newState, action.playerIndex, p.cell).ok;
+      return fire(oldState, action.playerIndex, p.cell).ok;
     }
     default:
       return true;
@@ -122,5 +147,7 @@ game.on('after_state_update', function (state) {
 registerFunction('validate_action', validateAction);
 registerFunction('place_ship', placeShip);
 registerFunction('random_place', randomPlace);
+registerFunction('remove_ship', removeShip);
+registerFunction('confirm_board', confirmBoard);
 registerFunction('fire', fire);
 `;

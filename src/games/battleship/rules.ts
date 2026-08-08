@@ -12,6 +12,7 @@ export interface BattleShip {
 
 export interface BattleBoard {
   placed: boolean;                                       // 5 艘是否全部部署完毕
+  confirmed: boolean;                                    // 玩家是否确认布阵（双方确认后开战）
   ships: BattleShip[];
   shots: Record<string, 'hit' | 'miss' | 'sunk'>;        // 对敌射击记录
 }
@@ -69,6 +70,7 @@ export function initBoards(count: number): BattleshipExtra {
     stage: 'placement',
     boards: Array.from({ length: count }, () => ({
       placed: false,
+      confirmed: false,
       ships: BATTLE_SHIPS.map(s => ({ id: s.id, size: s.size, cells: [], hits: 0, sunk: false })),
       shots: {},
     })),
@@ -95,10 +97,6 @@ function isValidShape(cells: string[]): boolean {
   return true;
 }
 
-function hasOverlap(board: BattleBoard, cells: string[]): boolean {
-  return board.ships.some(s => s.cells.some(c => cells.includes(c)));
-}
-
 // ---------- 布阵 ----------
 
 export type PlaceResult =
@@ -116,19 +114,44 @@ export function placeShip(
   if (!board) return { ok: false, error: '棋盘未初始化' };
   const ship = board.ships.find(s => s.id === shipId);
   if (!ship) return { ok: false, error: `未知舰船: ${shipId}` };
-  if (ship.cells.length > 0) return { ok: false, error: '该舰已部署' };
   if (cells.length !== ship.size) return { ok: false, error: `长度不符: 需要 ${ship.size} 格` };
   if (!isValidShape(cells)) return { ok: false, error: '必须横/竖一条直线且连续' };
-  if (hasOverlap(board, cells)) return { ok: false, error: '与已有舰船重叠' };
+  const otherCells = new Set(
+    board.ships.filter(s => s.id !== shipId).flatMap(s => s.cells),
+  );
+  if (cells.some(c => otherCells.has(c))) return { ok: false, error: '与已有舰船重叠' };
 
   const newBoard: BattleBoard = {
     ...board,
+    confirmed: false, // 改船后需重新确认
     ships: board.ships.map(s => (s.id === shipId ? { ...s, cells } : s)),
   };
   newBoard.placed = newBoard.ships.every(s => s.cells.length > 0);
   const boards = extra.boards.map((b, i) => (i === playerIndex ? newBoard : b));
-  const allPlaced = boards.every(b => b.placed);
-  return { ok: true, extra: { ...extra, stage: allPlaced ? 'battle' : 'placement', boards } };
+  return { ok: true, extra: { ...extra, boards } };
+}
+
+/** 移除单艘舰船（拖回列表），仅布阵阶段 */
+export function removeShip(
+  extra: BattleshipExtra,
+  playerIndex: number,
+  shipId: string,
+): PlaceResult {
+  if (extra.stage !== 'placement') return { ok: false, error: '当前不在布阵阶段' };
+  const board = extra.boards[playerIndex];
+  if (!board) return { ok: false, error: '棋盘未初始化' };
+  const ship = board.ships.find(s => s.id === shipId);
+  if (!ship) return { ok: false, error: `未知舰船: ${shipId}` };
+  if (ship.cells.length === 0) return { ok: false, error: '该舰未部署' };
+
+  const newBoard: BattleBoard = {
+    ...board,
+    confirmed: false, // 移除舰船后需重新确认
+    ships: board.ships.map(s => (s.id === shipId ? { ...s, cells: [], hits: 0, sunk: false } : s)),
+  };
+  newBoard.placed = newBoard.ships.every(s => s.cells.length > 0);
+  const boards = extra.boards.map((b, i) => (i === playerIndex ? newBoard : b));
+  return { ok: true, extra: { ...extra, boards } };
 }
 
 function randomCells(size: number): string[] {
@@ -147,7 +170,7 @@ export function randomPlace(extra: BattleshipExtra, playerIndex: number): PlaceR
   if (extra.stage !== 'placement') return { ok: false, error: '当前不在布阵阶段' };
   const board = extra.boards[playerIndex];
   if (!board) return { ok: false, error: '棋盘未初始化' };
-  if (board.placed) return { ok: false, error: '该玩家已布阵完毕' };
+  if (board.placed && board.confirmed) return { ok: false, error: '该玩家已确认布阵' };
 
   for (let attempt = 0; attempt < 2000; attempt++) {
     const ships: BattleShip[] = board.ships.map(s => ({ ...s, cells: [] }));
@@ -160,12 +183,24 @@ export function randomPlace(extra: BattleshipExtra, playerIndex: number): PlaceR
       cells.forEach(c => used.add(c));
     }
     if (!success) continue;
-    const newBoard: BattleBoard = { ...board, placed: true, ships };
+    const newBoard: BattleBoard = { ...board, placed: true, confirmed: false, ships };
     const boards = extra.boards.map((b, i) => (i === playerIndex ? newBoard : b));
-    const allPlaced = boards.every(b => b.placed);
-    return { ok: true, extra: { ...extra, stage: allPlaced ? 'battle' : 'placement', boards } };
+    return { ok: true, extra: { ...extra, boards } };
   }
   return { ok: false, error: '随机布阵失败，请重试' };
+}
+
+/** 确认布阵：双方都确认后进入战斗阶段 */
+export function confirmBoard(extra: BattleshipExtra, playerIndex: number): PlaceResult {
+  if (extra.stage !== 'placement') return { ok: false, error: '当前不在布阵阶段' };
+  const board = extra.boards[playerIndex];
+  if (!board) return { ok: false, error: '棋盘未初始化' };
+  if (!board.placed) return { ok: false, error: '请先部署全部舰船' };
+  if (board.confirmed) return { ok: false, error: '已确认布阵' };
+
+  const boards = extra.boards.map((b, i) => (i === playerIndex ? { ...b, confirmed: true } : b));
+  const allConfirmed = boards.every(b => b.confirmed);
+  return { ok: true, extra: { ...extra, stage: allConfirmed ? 'battle' : 'placement', boards } };
 }
 
 // ---------- 开火 ----------

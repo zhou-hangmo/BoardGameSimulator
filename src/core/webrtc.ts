@@ -1,7 +1,7 @@
 // WebRTC — manual SDP exchange via QR
 import { Logger } from '../utils/Logger';
 
-const ICE_SERVERS: RTCConfiguration = {
+export const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -60,6 +60,7 @@ export async function createTemplateSdp(): Promise<string> {
 export function applyFields(template: string, f: SdpFields): string {
   const candBlock = f.c.map(c => 'a=' + c).join('\r\n');
   return template
+    .replace(/a=candidate:[^\r\n]*\r?\n?/g, '')
     .replace(/m=application\s+\d+\s+\S+/g, `m=application ${f.mport} ${f.mproto}`)
     .replace(/c=IN\s+\S+\s+\S+\r?\n/g, (m) => m + (candBlock ? candBlock + '\r\n' : ''))
     .replace(/a=ice-options:trickle\r?\n/g, '')
@@ -67,8 +68,7 @@ export function applyFields(template: string, f: SdpFields): string {
     .replace(/a=ice-pwd:\S+/g,    `a=ice-pwd:${f.w}`)
     .replace(/a=fingerprint:\S+ \S+/g, `a=fingerprint:${f.f}`)
     .replace(/a=setup:\S+/g,      `a=setup:${f.s}`)
-    .replace(/a=sctp-port:\d+/g,  `a=sctp-port:${f.p}`)
-    .replace(/a=candidate:[^\r\n]*\r?\n?/g, '');
+    .replace(/a=sctp-port:\d+/g,  `a=sctp-port:${f.p}`);
 }
 
 export function monitorIce(pc: RTCPeerConnection, tag: string): void {
@@ -96,9 +96,16 @@ export function monitorIce(pc: RTCPeerConnection, tag: string): void {
     setTimeout(async () => {
       try {
         const stats = await pc.getStats();
+        const map = new Map<string, any>();
+        stats.forEach((r: any) => map.set(r.id, r));
         stats.forEach((r: any) => {
           if (r.type === 'candidate-pair' && r.state === 'succeeded') {
-            Logger.log('ICE', `${tag} ✅ pair connected: id=${r.id}`);
+            const fmt = (c: any) => {
+              if (!c) return '?';
+              const fam = (c.address || '').includes(':') ? 'IPv6' : 'IPv4';
+              return `${c.address || '?'}:${c.port ?? '?'} ${c.candidateType || '?'}/${c.protocol || '?'}(${fam})`;
+            };
+            Logger.log('ICE', `${tag} ✅ pair${r.selected ? '(选中)' : ''}: local=${fmt(map.get(r.localCandidateId))} remote=${fmt(map.get(r.remoteCandidateId))} state=${r.state}`);
           }
         });
       } catch { /* stats fail */ }

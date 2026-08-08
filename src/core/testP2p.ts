@@ -16,7 +16,10 @@ interface ChannelMsg {
   payload: unknown;
 }
 
-export const TEST_ROOM_CODE = '--test--';
+export const TEST_ROOM_CODE = '000000';
+
+const OFFER_KEY = 'bgs-test-offer';
+const POLL_MS = 400;
 
 export class TestP2P {
   private channel: BroadcastChannel;
@@ -25,6 +28,7 @@ export class TestP2P {
   private roomCode = '';
   private guests = new Map<string, unknown>(); // host 侧：guestId -> answer
   private joinSeq = 0;                          // host 侧：加入序号
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
   private onActionCb: ((action: GameAction) => void) | null = null;
   private onMsgCb: MsgCb | null = null;
   private onOfferCb: ((offerJson: string) => void) | null = null;
@@ -34,6 +38,21 @@ export class TestP2P {
     this.role = role;
     this.channel = new BroadcastChannel('bgs-test');
     this.channel.onmessage = (e: MessageEvent<ChannelMsg>) => this.handleMessage(e.data);
+    if (role === 'guest') this.startOfferPoll();
+  }
+
+  /** guest 后开时，通过 localStorage 轮询发现 host 写入的 offer */
+  private startOfferPoll(): void {
+    if (typeof localStorage === 'undefined') return;
+    this.pollTimer = setInterval(() => {
+      if (this.roomCode) return;
+      const raw = localStorage.getItem(OFFER_KEY);
+      if (!raw) return;
+      try {
+        const payload = JSON.parse(raw) as { rc: string };
+        this.onOfferCb?.(JSON.stringify(payload));
+      } catch { /* 忽略损坏数据 */ }
+    }, POLL_MS);
   }
 
   // ---------- 自动连接注册口 ----------
@@ -46,7 +65,11 @@ export class TestP2P {
   async createRoom(): Promise<string> {
     this.roomCode = TEST_ROOM_CODE;
     Logger.log('TEST', `createRoom: ${TEST_ROOM_CODE} (BroadcastChannel)`);
-    this.post('all', 'offer', { t: 'offer', rc: this.roomCode, test: true });
+    const offer = { t: 'offer', rc: this.roomCode, test: true };
+    this.post('all', 'offer', offer);
+    try {
+      localStorage.setItem(OFFER_KEY, JSON.stringify(offer));
+    } catch { /* 无 localStorage 环境（测试）跳过 */ }
     return this.roomCode;
   }
 
@@ -109,6 +132,15 @@ export class TestP2P {
   }
 
   leave(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    if (this.role === 'host') {
+      try {
+        localStorage.removeItem(OFFER_KEY);
+      } catch { /* 无 localStorage 环境（测试）跳过 */ }
+    }
     this.channel.close();
     this.guests.clear();
   }

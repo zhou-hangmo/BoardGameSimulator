@@ -4,7 +4,7 @@
 
 import type { GameState, GameAction } from './types';
 import {
-  initBoards, placeShip, randomPlace, fire,
+  initBoards, placeShip, randomPlace, removeShip, confirmBoard, fire,
   type BattleshipExtra,
 } from '../games/battleship/rules';
 
@@ -26,6 +26,10 @@ export function reducer(state: GameState, action: GameAction): GameState {
       return handleBattleshipPlace(state, action);
     case 'battleship_random':
       return handleBattleshipRandom(state, action);
+    case 'battleship_remove':
+      return handleBattleshipRemove(state, action);
+    case 'battleship_confirm':
+      return handleBattleshipConfirm(state, action);
     case 'battleship_fire':
       return handleBattleshipFire(state, action);
     default:
@@ -163,6 +167,24 @@ function handleBattleshipRandom(state: GameState, action: GameAction): GameState
   if (state.phase === 'ended') return state;
 
   const r = randomPlace(ensureExtra(state), action.playerIndex);
+  if (!r.ok) return state;
+  return applyExtra(state, r.extra);
+}
+
+function handleBattleshipRemove(state: GameState, action: GameAction): GameState {
+  if (state.phase === 'ended') return state;
+  const payload = action.payload as { shipId: string } | undefined;
+  if (!payload || typeof payload.shipId !== 'string') return state;
+
+  const r = removeShip(ensureExtra(state), action.playerIndex, payload.shipId);
+  if (!r.ok) return state;
+  return applyExtra(state, r.extra);
+}
+
+function handleBattleshipConfirm(state: GameState, action: GameAction): GameState {
+  if (state.phase === 'ended') return state;
+
+  const r = confirmBoard(ensureExtra(state), action.playerIndex);
   if (!r.ok) return state;
   return applyExtra(state, r.extra);
 }

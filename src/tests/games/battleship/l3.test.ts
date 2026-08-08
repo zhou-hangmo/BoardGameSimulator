@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  initBoards, placeShip, randomPlace, fire, parseCell, cellAt,
+  initBoards, placeShip, randomPlace, removeShip, confirmBoard, fire, parseCell, cellAt,
   BATTLE_SHIPS, type BattleshipExtra,
 } from '../../../games/battleship/rules';
 import { reducer } from '../../../core/reducer';
@@ -24,7 +24,7 @@ function place(extra: BattleshipExtra, idx: number, shipId: string, cells: strin
   return r.extra;
 }
 
-/** 双方都布好阵，返回 battle 阶段 extra。p1 全部舰船坐标固定，便于开火测试 */
+/** 双方都布好阵并确认，返回 battle 阶段 extra。p1 全部舰船坐标固定，便于开火测试 */
 function makeBattleExtra(): BattleshipExtra {
   let extra = initBoards(2);
   // p0: 竖排占 A/C/E/G/I 列
@@ -39,7 +39,15 @@ function makeBattleExtra(): BattleshipExtra {
   extra = place(extra, 1, 'ship_cruiser', ['B1', 'B2', 'B3']);
   extra = place(extra, 1, 'ship_submarine', ['D1', 'D2', 'D3']);
   extra = place(extra, 1, 'ship_patrol', ['F1', 'F2']);
+  extra = confirm(extra, 0);
+  extra = confirm(extra, 1);
   return extra;
+}
+
+function confirm(extra: BattleshipExtra, idx: number): BattleshipExtra {
+  const r = confirmBoard(extra, idx);
+  if (!r.ok) throw new Error(`确认失败: ${r.error}`);
+  return r.extra;
 }
 
 const P1_ALL_CELLS = [
@@ -121,16 +129,95 @@ describe('placeShip 布阵校验', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('同一舰船重复部署被拒绝', () => {
+  it('同一舰船可覆盖重放（换位）', () => {
     const extra = place(initBoards(2), 0, 'ship_patrol', ['B3', 'B4']);
     const r = placeShip(extra, 0, 'ship_patrol', ['C1', 'C2']);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.extra.boards[0].ships.find(s => s.id === 'ship_patrol')?.cells).toEqual(['C1', 'C2']);
+    expect(r.extra.boards[0].ships.some(s => s.id !== 'ship_patrol' && s.cells.includes('B3'))).toBe(false);
+  });
+
+  it('覆盖重放不可与其它舰重叠', () => {
+    const extra = place(initBoards(2), 0, 'ship_patrol', ['B3', 'B4']);
+    const r = placeShip(extra, 0, 'ship_cruiser', ['B4', 'B5', 'B6']);
     expect(r.ok).toBe(false);
   });
 
-  it('双方全部部署后进入 battle 阶段', () => {
+  it('双方部署并确认后进入 battle 阶段', () => {
     const extra = makeBattleExtra();
     expect(extra.stage).toBe('battle');
-    expect(extra.boards.every(b => b.placed)).toBe(true);
+    expect(extra.boards.every(b => b.placed && b.confirmed)).toBe(true);
+  });
+
+  it('仅部署不确认不进入 battle', () => {
+    let extra = initBoards(2);
+    extra = place(extra, 0, 'ship_carrier', ['A1', 'A2', 'A3', 'A4', 'A5']);
+    extra = place(extra, 0, 'ship_battleship', ['C1', 'C2', 'C3', 'C4']);
+    extra = place(extra, 0, 'ship_cruiser', ['E1', 'E2', 'E3']);
+    extra = place(extra, 0, 'ship_submarine', ['G1', 'G2', 'G3']);
+    extra = place(extra, 0, 'ship_patrol', ['I1', 'I2']);
+    expect(extra.stage).toBe('placement');
+    expect(extra.boards[0].placed).toBe(true);
+    expect(extra.boards[0].confirmed).toBe(false);
+  });
+
+  it('未部署完不能确认', () => {
+    let extra = place(initBoards(2), 0, 'ship_patrol', ['B3', 'B4']);
+    expect(confirmBoard(extra, 0).ok).toBe(false);
+    extra = place(extra, 0, 'ship_carrier', ['A1', 'A2', 'A3', 'A4', 'A5']);
+    extra = place(extra, 0, 'ship_battleship', ['C1', 'C2', 'C3', 'C4']);
+    extra = place(extra, 0, 'ship_cruiser', ['E1', 'E2', 'E3']);
+    extra = place(extra, 0, 'ship_submarine', ['G1', 'G2', 'G3']);
+    const r = confirmBoard(extra, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.extra.boards[0].confirmed).toBe(true);
+    expect(r.extra.stage).toBe('placement'); // 对方未确认
+  });
+
+  it('确认后改船会取消确认', () => {
+    let extra = initBoards(2);
+    extra = place(extra, 0, 'ship_patrol', ['B3', 'B4']);
+    extra = place(extra, 0, 'ship_carrier', ['A1', 'A2', 'A3', 'A4', 'A5']);
+    extra = place(extra, 0, 'ship_battleship', ['C1', 'C2', 'C3', 'C4']);
+    extra = place(extra, 0, 'ship_cruiser', ['E1', 'E2', 'E3']);
+    extra = place(extra, 0, 'ship_submarine', ['G1', 'G2', 'G3']);
+    extra = confirm(extra, 0);
+    expect(extra.boards[0].confirmed).toBe(true);
+    extra = place(extra, 0, 'ship_patrol', ['H1', 'H2']);
+    expect(extra.boards[0].confirmed).toBe(false);
+  });
+});
+
+describe('removeShip 移除舰船', () => {
+  it('移除已部署舰船并清空格子', () => {
+    const extra = place(initBoards(2), 0, 'ship_patrol', ['B3', 'B4']);
+    const r = removeShip(extra, 0, 'ship_patrol');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const ship = r.extra.boards[0].ships.find(s => s.id === 'ship_patrol');
+    expect(ship?.cells).toEqual([]);
+    expect(r.extra.boards[0].placed).toBe(false);
+  });
+
+  it('移除后可重新放置', () => {
+    let extra = place(initBoards(2), 0, 'ship_patrol', ['B3', 'B4']);
+    extra = (removeShip(extra, 0, 'ship_patrol') as { ok: true; extra: BattleshipExtra }).extra;
+    const r = placeShip(extra, 0, 'ship_patrol', ['C1', 'C2']);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.extra.boards[0].ships.find(s => s.id === 'ship_patrol')?.cells).toEqual(['C1', 'C2']);
+  });
+
+  it('未部署的舰船移除被拒绝', () => {
+    const r = removeShip(initBoards(2), 0, 'ship_patrol');
+    expect(r.ok).toBe(false);
+  });
+
+  it('战斗阶段不允许移除', () => {
+    const r = removeShip(makeBattleExtra(), 0, 'ship_patrol');
+    expect(r.ok).toBe(false);
   });
 });
 
@@ -146,9 +233,16 @@ describe('randomPlace 随机布阵', () => {
     expect(r.extra.boards[0].placed).toBe(true);
   });
 
-  it('已布阵完毕后再次随机被拒绝', () => {
-    const extra = (randomPlace(initBoards(2), 0) as { ok: true; extra: BattleshipExtra }).extra;
+  it('确认布阵后再次随机被拒绝', () => {
+    let extra = (randomPlace(initBoards(2), 0) as { ok: true; extra: BattleshipExtra }).extra;
+    extra = confirm(extra, 0);
     expect(randomPlace(extra, 0).ok).toBe(false);
+  });
+
+  it('未确认时允许重新随机', () => {
+    const extra = (randomPlace(initBoards(2), 0) as { ok: true; extra: BattleshipExtra }).extra;
+    expect(extra.boards[0].placed).toBe(true);
+    expect(randomPlace(extra, 0).ok).toBe(true);
   });
 });
 
@@ -219,10 +313,13 @@ describe('reducer 集成', () => {
     };
   }
 
-  it('battleship_place 递增 version 并进入 battle', () => {
+  it('battleship_place/confirm 全部部署并确认后进入 battle', () => {
     let s = gameState();
     const act = (playerIndex: number, shipId: string, cells: string[]) => ({
       type: 'battleship_place', playerIndex, payload: { shipId, cells }, timestamp: 0,
+    });
+    const conf = (playerIndex: number) => ({
+      type: 'battleship_confirm', playerIndex, payload: null, timestamp: 0,
     });
     s = reducer(s, act(0, 'ship_carrier', ['A1', 'A2', 'A3', 'A4', 'A5']));
     expect(s.phase).toBe('idle');
@@ -236,8 +333,13 @@ describe('reducer 集成', () => {
     s = reducer(s, act(1, 'ship_cruiser', ['B1', 'B2', 'B3']));
     s = reducer(s, act(1, 'ship_submarine', ['D1', 'D2', 'D3']));
     s = reducer(s, act(1, 'ship_patrol', ['F1', 'F2']));
+    expect(s.phase).toBe('idle');
+    expect((s.extra as BattleshipExtra).stage).toBe('placement');
+    s = reducer(s, conf(0));
+    expect(s.phase).toBe('idle');
+    s = reducer(s, conf(1));
     expect(s.phase).toBe('playing');
-    expect(s.version).toBe(10);
+    expect(s.version).toBe(12);
     expect((s.extra as BattleshipExtra).stage).toBe('battle');
   });
 
@@ -285,11 +387,37 @@ describe('reducer 集成', () => {
     expect(s.winner).toBe(0);
   });
 
-  it('battleship_random 可一键布阵', () => {
+  it('battleship_random 一键布阵后需双方确认才开战', () => {
     let s = gameState();
     s = reducer(s, { type: 'battleship_random', playerIndex: 0, payload: null, timestamp: 0 });
     expect((s.extra as BattleshipExtra).boards[0].placed).toBe(true);
+    expect(s.phase).toBe('idle');
     s = reducer(s, { type: 'battleship_random', playerIndex: 1, payload: null, timestamp: 0 });
+    expect(s.phase).toBe('idle');
+    s = reducer(s, { type: 'battleship_confirm', playerIndex: 0, payload: null, timestamp: 0 });
+    expect(s.phase).toBe('idle');
+    s = reducer(s, { type: 'battleship_confirm', playerIndex: 1, payload: null, timestamp: 0 });
     expect(s.phase).toBe('playing');
+  });
+
+  it('battleship_remove 移除后阶段回退且可重放', () => {
+    let s = gameState();
+    const act = (playerIndex: number, shipId: string, cells: string[]) => ({
+      type: 'battleship_place', playerIndex, payload: { shipId, cells }, timestamp: 0,
+    });
+    s = reducer(s, act(0, 'ship_patrol', ['I1', 'I2']));
+    s = reducer(s, act(0, 'ship_carrier', ['A1', 'A2', 'A3', 'A4', 'A5']));
+    expect((s.extra as BattleshipExtra).boards[0].placed).toBe(false);
+    s = reducer(s, { type: 'battleship_remove', playerIndex: 0, payload: { shipId: 'ship_patrol' }, timestamp: 0 });
+    const ship = (s.extra as BattleshipExtra).boards[0].ships.find(x => x.id === 'ship_patrol');
+    expect(ship?.cells).toEqual([]);
+    s = reducer(s, act(0, 'ship_patrol', ['J1', 'J2']));
+    expect((s.extra as BattleshipExtra).boards[0].ships.find(x => x.id === 'ship_patrol')?.cells).toEqual(['J1', 'J2']);
+  });
+
+  it('battleship_remove 战斗阶段被拒绝', () => {
+    const s = { ...gameState(), phase: 'playing', currentTurn: 0, extra: makeBattleExtra() };
+    const r = reducer(s, { type: 'battleship_remove', playerIndex: 0, payload: { shipId: 'ship_patrol' }, timestamp: 0 });
+    expect(r).toBe(s);
   });
 });

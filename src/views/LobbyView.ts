@@ -9,12 +9,8 @@ export interface PlayerInfo {
   name: string;
   isHost: boolean;
   isSpectator?: boolean;  // 观战区
-  isIdle?: boolean;       // 空闲玩家（超过有效人数，未点观战）
-  canSpectate?: boolean;  // 该行显示「观战」按钮
   status?: string;
 }
-
-const TEST_HINT = '🔬 测试模式 · 免扫码自动连接';
 
 export class LobbyView extends BaseView {
   constructor(parent: HTMLElement) {
@@ -55,7 +51,7 @@ export class LobbyView extends BaseView {
   // ========== HTML builders ==========
 
   private buildLobbyHtml(code: string, players: PlayerInfo[], qrImg: string, maxPlayers: number): string {
-    const validCount = players.filter(p => !p.isIdle && !p.isSpectator).length;
+    const validCount = players.filter(p => !p.isSpectator).length;
     const canStart = validCount >= maxPlayers;
     return `
       <div class="nav-bar"><span class="nav-title">房间大厅</span></div>
@@ -70,15 +66,15 @@ export class LobbyView extends BaseView {
                 <img src="${qrImg}" style="width:280px;height:280px;max-width:90vw;border-radius:12px;" />
                 <div style="color:var(--label3);font-size:13px;margin-top:4px;">让好友扫此码加入</div>
               </div>`
-            : `<div style="text-align:center;padding:16px 0;color:var(--label2);font-size:14px;">${TEST_HINT}</div>`}
+            : ''}
            <div class="section-hdr">玩家 (${validCount}/${maxPlayers})</div>
-          ${this.buildPlayerRows(players.filter(p => !p.isSpectator))}
+          ${this.buildPlayerRows(players.filter(p => !p.isSpectator), true)}
           ${players.some(p => p.isSpectator) ? `<div class="section-hdr" style="margin-top:12px;">观战 (${players.filter(p => p.isSpectator).length})</div>` : ''}
-          ${this.buildPlayerRows(players.filter(p => p.isSpectator))}
+          ${this.buildPlayerRows(players.filter(p => p.isSpectator), true)}
           <button id="btn-start" class="btn btn-primary btn-block" style="margin-top:16px;" ${canStart ? '' : 'disabled'}>开始游戏</button>
           <button id="btn-share" class="btn btn-secondary btn-block" style="margin-top:8px;">📤 分享房间</button>
           <button id="btn-scan-guest" class="btn btn-secondary btn-block" style="margin-top:4px;">📷 扫访客码</button>
-          <button id="btn-log" class="btn btn-secondary btn-block" style="margin-top:4px;font-size:13px;">📋 记录</button>
+          <button id="btn-log" class="btn btn-secondary btn-block" style="margin-top:4px;">📋 记录</button>
         </div>
       </div>`;
   }
@@ -107,7 +103,7 @@ export class LobbyView extends BaseView {
           ${qrImg
             ? `<img src="${qrImg}" style="width:280px;height:280px;max-width:90vw;border-radius:12px;" />
                <div style="color:var(--label3);font-size:13px;margin-top:8px;">请让主持人扫描此码完成连接</div>`
-            : `<div style="color:var(--label2);font-size:14px;padding:16px 0;">${TEST_HINT}，等待主持人接入...</div>`}
+            : `<div style="color:var(--label2);font-size:14px;padding:16px 0;">等待主持人接入...</div>`}
           <button id="btn-log-guest" class="btn btn-secondary btn-block" style="margin-top:8px;">📋 记录</button>
         </div>
       </div>`;
@@ -130,12 +126,15 @@ export class LobbyView extends BaseView {
       </div>`;
   }
 
-  private buildPlayerRows(players: PlayerInfo[]): string {
+  private buildPlayerRows(players: PlayerInfo[], withActions = false): string {
     return players.map(p => {
       const tag = p.isSpectator ? ' (观战)' : p.isHost ? ' (主持人)' : '';
-      const btn = p.canSpectate
-        ? `<button data-spectate-name="${p.name}" class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:4px 10px;">观战</button>`
-        : `<span style="margin-left:auto;font-size:12px;color:var(--label3)">${p.status || ''}</span>`;
+      let btn = `<span style="margin-left:auto;font-size:12px;color:var(--label3)">${p.status || ''}</span>`;
+      if (withActions && !p.isSpectator) {
+        btn = `<button data-spectate-name="${p.name}" class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:4px 10px;">观战</button>`;
+      } else if (withActions && p.isSpectator) {
+        btn = `<button data-unspectate-name="${p.name}" class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:4px 10px;">转回玩家</button>`;
+      }
       return `<div class="player-row"><span class="dot green"></span>${p.name}${tag}${btn}</div>`;
     }).join('');
   }
@@ -159,6 +158,11 @@ export class LobbyView extends BaseView {
     this.el.querySelectorAll<HTMLButtonElement>('[data-spectate-name]').forEach(btn => {
       btn.addEventListener('pointerdown', () => {
         this.emit('ui:spectate_player', btn.dataset.spectateName!);
+      });
+    });
+    this.el.querySelectorAll<HTMLButtonElement>('[data-unspectate-name]').forEach(btn => {
+      btn.addEventListener('pointerdown', () => {
+        this.emit('ui:unspectate_player', btn.dataset.unspectateName!);
       });
     });
   }

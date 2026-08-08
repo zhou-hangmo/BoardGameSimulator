@@ -2,10 +2,20 @@
 // 单元测试 — TestP2P 假传输（同进程 host/guest 握手与消息路由）
 // ============================================================
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { TestP2P, TEST_ROOM_CODE } from '../../core/testP2p';
 
 const tick = () => new Promise(r => setTimeout(r, 30));
+
+// localStorage stub（Node 测试环境无 localStorage）
+const store = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+  getItem: (k: string) => store.get(k) ?? null,
+  setItem: (k: string, v: string) => { store.set(k, v); },
+  removeItem: (k: string) => { store.delete(k); },
+});
+beforeEach(() => store.clear());
+afterAll(() => vi.unstubAllGlobals());
 
 /** 完成一次 host/guest 握手，返回 host 分配的 pid */
 async function handshake(host: TestP2P, guest: TestP2P): Promise<string> {
@@ -21,7 +31,7 @@ async function handshake(host: TestP2P, guest: TestP2P): Promise<string> {
 }
 
 describe('TestP2P 握手', () => {
-  it('host 创建房间广播 offer，guest 收到 --test-- 房间码', async () => {
+  it('host 创建房间广播 offer，guest 收到 000000 房间码', async () => {
     const host = new TestP2P('host');
     const guest = new TestP2P('guest');
     const offerP = new Promise<string>(r => guest.onOffer(r));
@@ -88,6 +98,33 @@ describe('TestP2P 消息路由', () => {
     await tick();
     expect(got).toBeUndefined();
     host.leave(); guest.leave();
+  });
+});
+
+describe('TestP2P 自动发现', () => {
+  it('guest 后开可通过 localStorage 发现 offer 并加入', async () => {
+    const host = new TestP2P('host');
+    await host.createRoom();
+    const guest = new TestP2P('guest');
+    const offerP = new Promise<string>(r => guest.onOffer(r));
+    const offer = await offerP;
+    expect(JSON.parse(offer).rc).toBe(TEST_ROOM_CODE);
+    const answerP = new Promise<string>(r => host.onAnswer(r));
+    const room = await guest.joinFromOffer(offer);
+    expect(room).toBe(TEST_ROOM_CODE);
+    const answer = await answerP;
+    const pid = await host.acceptGuestAnswer(answer);
+    expect(pid).toMatch(/^guest-/);
+    expect(host.getPeerCount()).toBe(1);
+    host.leave(); guest.leave();
+  });
+
+  it('host leave 后清除 localStorage offer', async () => {
+    const host = new TestP2P('host');
+    await host.createRoom();
+    expect(store.get('bgs-test-offer')).toContain(TEST_ROOM_CODE);
+    host.leave();
+    expect(store.has('bgs-test-offer')).toBe(false);
   });
 });
 

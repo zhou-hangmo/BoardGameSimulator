@@ -42,6 +42,16 @@ export class P2PManager {
     return encodeQR({ t: 'offer', rc: this.roomCode, ...this.hostFields } as any);
   }
 
+  /** 调试/自动化用：host 侧 offer 字段 JSON（与 QR 内容一致） */
+  getHostOfferJson(): string {
+    return JSON.stringify({ t: 'offer', rc: this.roomCode, ...this.hostFields });
+  }
+
+  /** 调试/自动化用：guest 侧 answer 字段 JSON（与 QR 内容一致） */
+  getGuestAnswerJson(): string {
+    return JSON.stringify({ t: 'answer', rc: this.roomCode, ...this.guestFields });
+  }
+
   async joinFromOffer(offerQrJson: string): Promise<string> {
     const flat = JSON.parse(offerQrJson);
     this.roomCode = flat.rc;
