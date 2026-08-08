@@ -6,6 +6,11 @@
 import { ICE_SERVERS, extractFields, hostCreateOffer, hostAcceptAnswer, guestCreateAnswer, type Connection, type SdpFields } from './core/webrtc';
 import { encodeQR, decodeQR, scanImage } from './core/qrcode';
 
+declare const __COMMIT__: string;
+
+// 版本标记：随构建/推送递增，用于确认硬刷新已加载新版本
+export const DIAG6_VER = `build#${__COMMIT__ ?? 'dev'}`;
+
 const $ = (id: string) => document.getElementById(id)!;
 const out = (id: string, cls: string, text: string) => {
   const el = $(id);
@@ -46,6 +51,7 @@ function waitIce(pc: RTCPeerConnection, timeoutMs = 6000): Promise<void> {
 // ---------- 模块① 设备指纹 ----------
 async function mod1(): Promise<void> {
   clear('m1');
+  out('m1', 'hl', `版本: ${DIAG6_VER}`);
   out('m1', 's', `protocol=${location.protocol} secure=${isSecureContext} online=${navigator.onLine}`);
   const conn = (navigator as any).connection;
   if (conn) out('m1', 's', `connection: type=${conn.effectiveType || '?'} downlink=${conn.downlink || '?'} saveData=${conn.saveData || '?'}`);
@@ -312,9 +318,9 @@ $('btn-host').addEventListener('click', () => void mod3Host());
 $('btn-guest').addEventListener('click', () => void mod3Guest());
 
 (async () => {
-  $('status').textContent = '模块①...';
+  $('status').textContent = `${DIAG6_VER} 模块①...`;
   await mod1();
-  $('status').textContent = '模块②...';
+  $('status').textContent = `${DIAG6_VER} 模块②...`;
   await mod2();
-  $('status').textContent = '完成';
+  $('status').textContent = `${DIAG6_VER} 完成`;
 })().catch(e => { out('m1', 'err', 'FATAL: ' + (e as Error).message); $('status').textContent = '失败'; });
