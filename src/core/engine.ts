@@ -147,7 +147,17 @@ export class GameEngine {
     this.state = state;
   }
 
+  // 串行队列：保证并发 dispatch 按到达顺序逐个执行（L3 worker 基于 this.state 快照，
+  // 并发会 lost update——后完成者覆盖先完成者）
+  private dispatchQueue: Promise<unknown> = Promise.resolve();
+
   async dispatch(action: GameAction): Promise<ErrorResponse | null> {
+    const run = this.dispatchQueue.then(() => this.dispatchInner(action));
+    this.dispatchQueue = run.catch(() => { /* 队列吞错，后续继续 */ });
+    return run;
+  }
+
+  private async dispatchInner(action: GameAction): Promise<ErrorResponse | null> {
     // 1. L3 前置钩子
     await this.callWorker('hook', 'before_action', [action]);
 

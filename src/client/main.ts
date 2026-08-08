@@ -8,6 +8,7 @@ import '../components/PlayerRow';
 import { GameEngine } from '../core/engine';
 import { P2PManager } from '../core/p2p';
 import { TestP2P, TEST_ROOM_CODE } from '../core/testP2p';
+import { WSTransport } from '../core/wsTransport';
 import { bus } from '../utils/EventBus';
 import { Logger } from '../utils/Logger';
 import { ToastManager } from '../views/ToastView';
@@ -33,6 +34,13 @@ const TEST = import.meta.env.DEV && params.get('test') !== null;
 const TEST_ROLE = (params.get('role') ?? 'host') as 'host' | 'guest';
 const TEST_GAME = params.get('game') ?? 'battleship';
 
+// ========== WS 模式判定（方案A：设备当服务器，PC 验证版） ==========
+const WS_MODE = params.get('ws') !== null;
+const WS_URL = params.get('ws') === '1' || params.get('ws') === null
+  ? 'ws://localhost:8787'
+  : params.get('ws') as string;
+const WS_ROLE = (params.get('role') ?? 'host') as 'host' | 'guest';
+
 // ========== 全局状态 ==========
 const app = document.getElementById('app')!;
 const homeView = new HomeView(app, () => installedGames);
@@ -51,7 +59,7 @@ globalHomeBtn.addEventListener('click', () => showHome());
 document.body.appendChild(globalHomeBtn);
 
 let engine: GameEngine | null = null;
-let p2p: P2PManager | TestP2P | null = null;
+let p2p: P2PManager | TestP2P | WSTransport | null = null;
 let myIdx = 0;
 let isHost = false;
 let room = '';
@@ -101,8 +109,10 @@ function showGameView(v: PlayerView): void {
   globalHomeBtn.style.display = 'none';
 }
 
-function createP2P(): P2PManager | TestP2P {
-  return TEST ? new TestP2P(TEST_ROLE) : new P2PManager();
+function createP2P(): P2PManager | TestP2P | WSTransport {
+  if (TEST) return new TestP2P(TEST_ROLE);
+  if (WS_MODE) return new WSTransport(WS_ROLE, WS_URL);
+  return new P2PManager();
 }
 
 function broadcastGame(): void {
@@ -144,7 +154,7 @@ async function doJoinRoom(qrData: string): Promise<void> {
   room = await p2p.joinFromOffer(qrData);
   Logger.log('APP', `joinRoom: room=${room}`);
   const answerImg = await p2p.getGuestQrImage();
-  if (TEST) {
+  if (TEST || WS_MODE) {
     lobbyView.showWaitRoom(room, []);
   } else {
     lobbyView.showGuestQr(room, answerImg);
@@ -240,8 +250,8 @@ bus.on(EVENTS.UI_CREATE_ROOM, async (gameId: string) => {
   isHost = true; myIdx = 0;
   currentGameId = g.id;
   p2p = createP2P();
-  if (TEST) {
-    (p2p as TestP2P).onAnswer((ans: string) => { void doScanGuest(ans); });
+  if (TEST || WS_MODE) {
+    (p2p as TestP2P | WSTransport).onAnswer((ans: string) => { void doScanGuest(ans); });
   }
   room = await p2p.createRoom();
   gameNeeds = (g.config as GameConfig).meta.maxPlayers;
@@ -469,6 +479,14 @@ if (TEST) {
     lobbyView.showWaitRoom(TEST_ROOM_CODE, []);
     lobbyView.mount();
     showNonHomeView();
+  }
+} else if (WS_MODE) {
+  if (WS_ROLE === 'host') {
+    bus.emit(EVENTS.UI_CREATE_ROOM, 'battleship');
+  } else {
+    isHost = false;
+    p2p = createP2P();
+    void doJoinRoom('{}');
   }
 } else {
   showHome();
