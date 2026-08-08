@@ -31,7 +31,7 @@ function classifyCand(cand: string): CandInfo | null {
 
 function parseCands(sdp: string): CandInfo[] {
   return (sdp.match(/a=candidate:[^\r\n]*/g) || [])
-    .map(c => classifyCand(c))
+    .map(c => classifyCand(c.replace(/^a=/, '')))
     .filter((c): c is CandInfo => !!c);
 }
 
