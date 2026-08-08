@@ -9,6 +9,7 @@ import type {
 } from './types';
 import { ActionRegistry, ConditionRegistry } from './registry';
 import { reducer } from './reducer';
+import { L3Inline } from './l3Inline';
 
 // ---------- Worker 消息类型 ----------
 interface WorkerRequest {
@@ -32,6 +33,7 @@ export class GameEngine {
   private state: GameState;
   private config: GameConfig | null = null;
   private worker: Worker | null = null;
+  private inline: L3Inline | null = null;
   private workerReady = false;
   private pendingCallbacks = new Map<number, L3Callback>();
   private requestId = 0;
@@ -97,9 +99,14 @@ export class GameEngine {
     return errors;
   }
 
-  // ========== L3 Worker 管理 ==========
+  // ========== L3 管理（浏览器用 Worker 沙箱，Node 用进程内执行） ==========
 
   private initWorker(l3Code: string): void {
+    if (typeof Worker === 'undefined') {
+      this.inline = new L3Inline(l3Code);
+      this.workerReady = true;
+      return;
+    }
     this.worker = new Worker(new URL('./l3.worker.ts', import.meta.url), { type: 'module' });
 
     this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
@@ -120,7 +127,13 @@ export class GameEngine {
   }
 
   private callWorker(type: 'hook' | 'query', name: string, args: unknown[]): Promise<unknown> {
-    if (!this.worker || !this.workerReady) {
+    if (!this.workerReady) {
+      return Promise.resolve(undefined);
+    }
+    if (this.inline) {
+      return this.inline.call(type, name, this.state, args);
+    }
+    if (!this.worker) {
       return Promise.resolve(undefined);
     }
     const id = ++this.requestId;
@@ -133,7 +146,7 @@ export class GameEngine {
 
   // 调用 L3 注册的自定义函数（state 会自动作为首个参数传入）
   query(name: string, ...args: unknown[]): Promise<unknown> {
-    if (!this.worker || !this.workerReady) return Promise.resolve(undefined);
+    if (!this.workerReady) return Promise.resolve(undefined);
     return this.callWorker('query', name, args);
   }
 

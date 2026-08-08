@@ -481,13 +481,10 @@ if (TEST) {
     showNonHomeView();
   }
 } else if (WS_MODE) {
-  if (WS_ROLE === 'host') {
-    bus.emit(EVENTS.UI_CREATE_ROOM, 'battleship');
-  } else {
-    isHost = false;
-    p2p = createP2P();
-    void doJoinRoom('{}');
-  }
+  // 服务器端权威（Node host-server）：浏览器 host/guest 均为纯客户端
+  isHost = false;
+  p2p = createP2P();
+  void doJoinRoom('{}');
 } else {
   showHome();
 }

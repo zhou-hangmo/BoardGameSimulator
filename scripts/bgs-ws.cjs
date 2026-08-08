@@ -1,6 +1,6 @@
 // ============================================================
-// BoardGameSimulator — 方案A（WS 服务器）自动化验证
-// 启动 ws-server 子进程 → host/guest 两页 ?ws=1 → 完整一局
+// BoardGameSimulator — 方案A 服务器端自动化验证
+// Node host-server（引擎权威） + 两个纯客户端浏览器页面
 // 用法: node scripts/bgs-ws.cjs
 // ============================================================
 'use strict';
@@ -19,7 +19,7 @@ function record(name, ok, detail) {
   console.log(`[${ok ? 'PASS' : 'FAIL'}] ${name}${detail ? ' — ' + detail : ''}`);
 }
 
-async function poll(page, fn, timeout = 15000, desc = '条件') {
+async function poll(page, fn, timeout = 20000, desc = '条件') {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     try {
@@ -53,13 +53,15 @@ async function main() {
   if (res.status !== 200) throw new Error(`dev server 不可达 (${BASE}) status=${res.status}`);
   console.log(`✅ dev server ${BASE} (${res.status})`);
 
-  // 启动 ws-server 子进程
-  const srv = spawn('node', [path.join(__dirname, 'ws-server.cjs'), String(WS_PORT)], {
+  // 启动 Node host-server 子进程
+  const tsx = path.join(__dirname, '..', 'node_modules', '.bin', 'tsx.cmd');
+  const srv = spawn('cmd.exe', ['/c', tsx, path.join(__dirname, 'host-server.ts'), String(WS_PORT)], {
     cwd: path.join(__dirname, '..'),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  srv.stdout.on('data', d => console.log(`  [ws-server] ${d.toString().trim()}`));
-  await new Promise(r => setTimeout(r, 1500));
+  srv.stdout.on('data', d => console.log(`  [server] ${d.toString().trim()}`));
+  srv.stderr.on('data', d => console.log(`  [server-err] ${d.toString().trim().slice(0, 200)}`));
+  await new Promise(r => setTimeout(r, 2500));
 
   const browser = await puppeteer.launch({
     executablePath: EDGE_PATH,
@@ -71,44 +73,40 @@ async function main() {
     const context = await browser.createBrowserContext();
     const host = await context.newPage();
     const guest = await context.newPage();
-    for (const p of [host, guest]) {
+    for (const [p, tag] of [[host, 'host'], [guest, 'guest']]) {
       await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
-      p.on('pageerror', e => { pageErrors.push(`pageerror: ${e.message}`); console.log(`  [${p === host ? 'host' : 'guest'}][pageerror] ${e.message}`); });
-      p.on('console', m => { if (m.type() === 'error') { pageErrors.push(`console.error: ${m.text()}`); console.log(`  [${p === host ? 'host' : 'guest'}][console.error] ${m.text().slice(0, 200)}`); } });
+      p.on('pageerror', e => { pageErrors.push(`pageerror: ${e.message}`); console.log(`  [${tag}][pageerror] ${e.message}`); });
+      p.on('console', m => { if (m.type() === 'error') { pageErrors.push(`console.error: ${m.text()}`); console.log(`  [${tag}][console.error] ${m.text().slice(0, 200)}`); } });
     }
 
-    // ---------- host: ?ws=1 自动建房间 ----------
+    // ---------- 两个纯客户端接入服务器 ----------
     await host.goto(`${BASE}?ws=1&role=host`, { waitUntil: 'load', timeout: 30000 });
-    await poll(host, () => !!document.querySelector('.room-code'), 15000, 'host 房间大厅');
-    record('WS host 建房间', true, 'room-code 出现');
-
-    // ---------- guest: ?ws=1 自动加入 ----------
     await guest.goto(`${BASE}?ws=1&role=guest`, { waitUntil: 'load', timeout: 30000 });
-    await poll(host, () => {
-      const btn = document.querySelector('#btn-start');
-      return btn && !btn.disabled;
-    }, 15000, 'host 满员 2/2');
-    record('WS guest 接入', true, 'host 满员，开始可用');
+    await poll(host, () => document.querySelectorAll('.bs-grid').length >= 1, 25000, 'host 收到 state 显示布阵棋盘');
+    await poll(guest, () => document.querySelectorAll('.bs-grid').length >= 1, 15000, 'guest 收到 state 显示布阵棋盘');
+    record('服务器开局下发', true, '两端渲染布阵棋盘（引擎在 Node）');
 
-    // ---------- 开始游戏 → guest 收到 state ----------
-    await tap(host, '#btn-start');
-    await poll(guest, () => document.querySelectorAll('.bs-grid').length >= 1, 20000, 'guest 收到 state 显示布阵棋盘');
-    record('WS host→guest 下发', true, 'guest 渲染棋盘');
-
-    // ---------- 双向动作 ----------
-    await tap(guest, '随机布阵');
+    // ---------- 双向随机布阵（走服务器引擎） ----------
     await tap(host, '随机布阵');
-    await poll(guest, () => Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes('确认布阵')), 15000, 'guest 确认按钮出现');
+    await tap(guest, '随机布阵');
     await poll(host, () => Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes('确认布阵')), 15000, 'host 确认按钮出现');
-    await tap(guest, '确认布阵');
+    await poll(guest, () => Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes('确认布阵')), 15000, 'guest 确认按钮出现');
+    record('服务器引擎处理随机', true, '两端 placed 状态经服务器同步');
+
+    // ---------- 确认 → 战斗 ----------
     await tap(host, '确认布阵');
+    await tap(guest, '确认布阵');
     await poll(host, () => {
       const bv = window.__bgs?.battleView;
       return bv?.extra?.stage === 'battle';
-    }, 15000, '双方确认进入战斗（guest 动作经 WS 到达 host）');
-    record('WS guest→host 往返', true, 'host 进入战斗阶段');
+    }, 15000, 'host 进入战斗阶段');
+    await poll(guest, () => {
+      const bv = window.__bgs?.battleView;
+      return bv?.extra?.stage === 'battle';
+    }, 15000, 'guest 进入战斗阶段');
+    record('确认流程(服务器引擎)', true, '双方进入战斗');
 
-    // ---------- 开火 ----------
+    // ---------- 开火往返 ----------
     await host.evaluate(() => {
       const bv = window.__bgs.battleView;
       if (!bv) return;
@@ -120,10 +118,10 @@ async function main() {
       const bv = window.__bgs?.battleView;
       return bv?.extra?.stage === 'battle' && (bv.extra.log || []).length > 0;
     }, 10000, 'guest 收到开火记录');
-    record('WS 开火往返', true, 'guest 日志出现开火记录');
+    record('开火往返(服务器引擎)', true, 'guest 日志出现开火记录');
 
     const failed = results.filter(r => !r.ok);
-    console.log(`\n══════════ WS 验证结果: ${results.length - failed.length}/${results.length} ══════════`);
+    console.log(`\n══════════ 服务器端验证结果: ${results.length - failed.length}/${results.length} ══════════`);
     results.forEach(r => console.log(`  [${r.ok ? 'PASS' : 'FAIL'}] ${r.name}`));
     if (pageErrors.length) console.log(`⚠️ 页面错误: ${pageErrors.join(' ; ')}`);
     process.exit(failed.length ? 1 : 0);
