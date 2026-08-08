@@ -134,17 +134,27 @@ function startStats(): void {
         const sel = r.selected || r.nominated ? 'sel' : '';
         rows.push(`<tr class="${sel}"><td>${r.state}</td><td>${r.selected ? '✓' : ''}${r.nominated ? 'N' : ''}</td><td>${renderCandStats(lc)}</td><td>${renderCandStats(rc)}</td></tr>`);
       });
+      const iceState = diag.conn?.pc?.iceConnectionState ?? '?';
+      const header = `<div class="step" id="stats-table">candidate-pair（每 2s 刷新，iceState=${iceState}，绿行=选中）</div>`;
       if (rows.length === 0) {
-        el.insertAdjacentHTML('beforeend', `<div class="s">⏳ 暂无 candidate-pair（ICE 协商中）...</div>`);
+        el.insertAdjacentHTML('beforeend', `${header}<div class="s">⏳ 暂无 candidate-pair（ICE 协商中）...</div>`);
         return;
       }
       el.insertAdjacentHTML('beforeend',
-        `<div class="step" id="stats-table">candidate-pair（每 2s 刷新，绿色行=选中）</div>
-         <table id="stats-table"><tr><th>state</th><th>选</th><th>local</th><th>remote</th></tr>${rows.join('')}</table>`);
+        `${header}
+         <table><tr><th>state</th><th>选</th><th>local</th><th>remote</th></tr>${rows.join('')}</table>`);
     } catch (e) {
       log3('err', 'getStats 失败: ' + (e as Error).message);
     }
   }, 2000);
+}
+
+/** 跟踪并输出 ICE 连接状态变化 */
+function trackIceState(): void {
+  const pc = diag.conn?.pc;
+  if (!pc) return;
+  pc.oniceconnectionstatechange = () => log3('s', `ICE state → ${pc.iceConnectionState}`);
+  pc.onicegatheringstatechange = () => log3('s', `ICE gathering → ${pc.iceGatheringState}`);
 }
 
 function stopStats(): void {
@@ -235,6 +245,8 @@ function waitDcOpen(conn: Connection, timeoutMs = 15000): Promise<boolean> {
 async function setupConnected(conn: Connection, role: string): Promise<void> {
   diag.conn = conn;
   diag.role = role;
+  trackIceState();
+  startStats();
   const ok = await waitDcOpen(conn);
   log3(ok ? 'ok' : 'err', ok ? `✅ 数据通道已打开（role=${role}）` : '❌ 数据通道超时未打开');
   if (ok) {
