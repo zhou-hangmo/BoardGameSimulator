@@ -17,7 +17,8 @@ import type { GameState, GameAction, PlayerView } from '../src/core/types';
 import type { GameMeta, LobbyState, LobbyPlayer, SeatAssign, GameStarted, ClientMsg } from '../src/core/lobbyTypes';
 
 const PORT = parseInt(process.argv[2] || '8787', 10);
-const DOCS = path.join(__dirname, '..', 'docs');
+// docs 目录：App 内通过 BGS_DOCS 环境变量指定（nodejs-project/docs），电脑上默认 ../docs
+const DOCS = process.env.BGS_DOCS || path.join(__dirname, '..', 'docs');
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
