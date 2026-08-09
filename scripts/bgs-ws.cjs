@@ -1,6 +1,6 @@
 // ============================================================
-// BoardGameSimulator — 方案A 服务器端自动化验证
-// Node host-server（引擎权威） + 两个纯客户端浏览器页面
+// BoardGameSimulator — 一体服务器（host-server.cjs）自动化验证
+// 页面与 ws 全部来自 8787（与手机B 真机路径完全一致）
 // 用法: node scripts/bgs-ws.cjs
 // ============================================================
 'use strict';
@@ -9,8 +9,7 @@ const { spawn } = require('child_process');
 const puppeteer = require('puppeteer-core');
 
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const BASE = 'http://localhost:3000/BoardGameSimulator/';
-const WS_PORT = 8787;
+const ORIGIN = 'http://localhost:8787';
 const results = [];
 const pageErrors = [];
 
@@ -49,19 +48,10 @@ async function tap(page, selectorOrText) {
 }
 
 async function main() {
-  const res = await fetch(BASE, { signal: AbortSignal.timeout(3000) });
-  if (res.status !== 200) throw new Error(`dev server 不可达 (${BASE}) status=${res.status}`);
-  console.log(`✅ dev server ${BASE} (${res.status})`);
-
-  // 启动 Node host-server 子进程
-  const tsx = path.join(__dirname, '..', 'node_modules', '.bin', 'tsx.cmd');
-  const srv = spawn('cmd.exe', ['/c', tsx, path.join(__dirname, 'host-server.ts'), String(WS_PORT)], {
-    cwd: path.join(__dirname, '..'),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  srv.stdout.on('data', d => console.log(`  [server] ${d.toString().trim()}`));
-  srv.stderr.on('data', d => console.log(`  [server-err] ${d.toString().trim().slice(0, 200)}`));
-  await new Promise(r => setTimeout(r, 2500));
+  // 页面可访问性预检（一体服务器应已在跑：node scripts/host-server.cjs 8787）
+  const res = await fetch(`${ORIGIN}/`, { signal: AbortSignal.timeout(3000) });
+  if (res.status !== 200) throw new Error(`一体服务器不可达 (${ORIGIN}) status=${res.status} — 请先运行: node scripts/host-server.cjs 8787`);
+  console.log(`✅ 一体服务器 ${ORIGIN} (${res.status})`);
 
   const browser = await puppeteer.launch({
     executablePath: EDGE_PATH,
@@ -79,14 +69,14 @@ async function main() {
       p.on('console', m => { if (m.type() === 'error') { pageErrors.push(`console.error: ${m.text()}`); console.log(`  [${tag}][console.error] ${m.text().slice(0, 200)}`); } });
     }
 
-    // ---------- 两个纯客户端接入服务器 ----------
-    await host.goto(`${BASE}?ws=1&role=host`, { waitUntil: 'load', timeout: 30000 });
-    await guest.goto(`${BASE}?ws=1&role=guest`, { waitUntil: 'load', timeout: 30000 });
+    // ---------- 两个纯客户端：页面与 ws 都来自 8787 ----------
+    await host.goto(`${ORIGIN}/?ws=1&role=host`, { waitUntil: 'load', timeout: 30000 });
+    await guest.goto(`${ORIGIN}/?ws=1&role=guest`, { waitUntil: 'load', timeout: 30000 });
     await poll(host, () => document.querySelectorAll('.bs-grid').length >= 1, 25000, 'host 收到 state 显示布阵棋盘');
     await poll(guest, () => document.querySelectorAll('.bs-grid').length >= 1, 15000, 'guest 收到 state 显示布阵棋盘');
-    record('服务器开局下发', true, '两端渲染布阵棋盘（引擎在 Node）');
+    record('一体服务器开局下发', true, '两端渲染布阵棋盘（页面+ws 同源 8787）');
 
-    // ---------- 双向随机布阵（走服务器引擎） ----------
+    // ---------- 双向随机布阵 ----------
     await tap(host, '随机布阵');
     await tap(guest, '随机布阵');
     await poll(host, () => Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes('确认布阵')), 15000, 'host 确认按钮出现');
@@ -96,14 +86,8 @@ async function main() {
     // ---------- 确认 → 战斗 ----------
     await tap(host, '确认布阵');
     await tap(guest, '确认布阵');
-    await poll(host, () => {
-      const bv = window.__bgs?.battleView;
-      return bv?.extra?.stage === 'battle';
-    }, 15000, 'host 进入战斗阶段');
-    await poll(guest, () => {
-      const bv = window.__bgs?.battleView;
-      return bv?.extra?.stage === 'battle';
-    }, 15000, 'guest 进入战斗阶段');
+    await poll(host, () => { const bv = window.__bgs?.battleView; return bv?.extra?.stage === 'battle'; }, 15000, 'host 进入战斗');
+    await poll(guest, () => { const bv = window.__bgs?.battleView; return bv?.extra?.stage === 'battle'; }, 15000, 'guest 进入战斗');
     record('确认流程(服务器引擎)', true, '双方进入战斗');
 
     // ---------- 开火往返 ----------
@@ -121,13 +105,12 @@ async function main() {
     record('开火往返(服务器引擎)', true, 'guest 日志出现开火记录');
 
     const failed = results.filter(r => !r.ok);
-    console.log(`\n══════════ 服务器端验证结果: ${results.length - failed.length}/${results.length} ══════════`);
+    console.log(`\n══════════ 一体服务器验证结果: ${results.length - failed.length}/${results.length} ══════════`);
     results.forEach(r => console.log(`  [${r.ok ? 'PASS' : 'FAIL'}] ${r.name}`));
     if (pageErrors.length) console.log(`⚠️ 页面错误: ${pageErrors.join(' ; ')}`);
     process.exit(failed.length ? 1 : 0);
   } finally {
     await browser.close();
-    srv.kill();
   }
 }
 

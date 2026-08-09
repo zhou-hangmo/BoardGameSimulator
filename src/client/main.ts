@@ -34,10 +34,10 @@ const TEST = import.meta.env.DEV && params.get('test') !== null;
 const TEST_ROLE = (params.get('role') ?? 'host') as 'host' | 'guest';
 const TEST_GAME = params.get('game') ?? 'battleship';
 
-// ========== WS 模式判定（方案A：设备当服务器，PC 验证版） ==========
+// ========== WS 模式判定（方案A：设备当服务器） ==========
 const WS_MODE = params.get('ws') !== null;
 const WS_URL = params.get('ws') === '1' || params.get('ws') === null
-  ? 'ws://localhost:8787'
+  ? `ws://${location.host}`          // 同源：页面从哪加载就连哪（手机=手机，PC=localhost）
   : params.get('ws') as string;
 const WS_ROLE = (params.get('role') ?? 'host') as 'host' | 'guest';
 
