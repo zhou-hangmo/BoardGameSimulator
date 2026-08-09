@@ -5033,4 +5033,21 @@ wss.on("connection", (ws) => {
 });
 server.listen(PORT, "::", () => {
   log(`\u5927\u5385\u670D\u52A1\u5668 listening [::]:${PORT} (v4+v6 \u53CC\u6808, \u9875\u9762 http://<ip>:${PORT}/ + ws \u5927\u5385)`);
+  setInterval(() => {
+    for (const c of conns.values()) {
+      try {
+        c.ws.ping();
+      } catch {
+      }
+    }
+  }, 3e4);
+  setInterval(() => {
+    const fresh = collectAddresses();
+    if (JSON.stringify(fresh) !== JSON.stringify(ADDRS)) {
+      ADDRS.v6 = fresh.v6;
+      ADDRS.v4 = fresh.v4;
+      log(`\u672C\u673A\u5730\u5740\u53D8\u5316: v6=[${ADDRS.v6.join(", ")}] v4=[${ADDRS.v4.join(", ")}]`);
+      broadcastLobby("\u63A5\u5165\u5730\u5740\u5DF2\u66F4\u65B0\uFF0C\u8BF7\u91CD\u65B0\u5206\u4EAB\u9080\u8BF7");
+    }
+  }, 6e4);
 });

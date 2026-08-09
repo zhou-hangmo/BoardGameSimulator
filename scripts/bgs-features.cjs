@@ -67,7 +67,7 @@ async function main() {
   // 1. 两玩家接入
   const A = await connect();
   const B = await connect();
-  record('两玩家接入', A.myId === 'player-0' && B.myId === 'player-1', `${A.myId}/${B.myId}`);
+  record('两玩家接入', A.myId !== B.myId && !!A.state.players.find(p => p.id === A.myId)?.isHost, `${A.myId}(主机)/${B.myId}`);
 
   // 2. 踢人：A(主机) 踢 B
   A.send({ type: 'kick_player', playerId: B.myId });
@@ -107,6 +107,9 @@ async function main() {
 
   const failed = results.filter(r => !r.ok);
   console.log(`\n══════════ 新功能验证: ${results.length - failed.length}/${results.length} ══════════`);
+  // 清理：主机中止对局（避免触发 30s 重连窗口影响后续测试）
+  try { A.send({ type: 'back_to_lobby' }); } catch { /* ignore */ }
+  await sleep(300);
   A.ws.close(); B2.ws.close(); B4.ws.close();
   process.exit(failed.length ? 1 : 0);
 }

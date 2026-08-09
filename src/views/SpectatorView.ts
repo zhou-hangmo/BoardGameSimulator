@@ -37,8 +37,8 @@ export class SpectatorView extends BaseView {
           </div>
         </div>`;
       (this.el.querySelector('#btn-spectate-back') as HTMLButtonElement).addEventListener('pointerdown', () => {
-        this.emit('ui:leave_room');
-        this.emit('ui:go_home');
+        // 观战者回大厅：刷新重连（重连后收 lobby_state → 显示大厅）
+        location.reload();
       });
     }
 

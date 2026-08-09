@@ -127,6 +127,14 @@ export class LobbyView extends BaseView {
       nameWrap.append(el('span', { style: 'width:7px;height:7px;border-radius:50%;background:var(--color-green,#34c759);flex:none;' }));
     }
     nameWrap.append(el('span', { style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, [`${p.name}${p.isHost ? '（主机）' : ''}`]));
+    // 自己：点名字改名
+    if (isMe) {
+      const nameSpan = nameWrap.lastElementChild as HTMLElement;
+      nameSpan.style.borderBottom = '1px dashed var(--color-label3)';
+      nameSpan.style.cursor = 'pointer';
+      nameSpan.title = '点击改名';
+      nameSpan.addEventListener('pointerdown', () => this.openRenameDialog(p.name));
+    }
     row.append(nameWrap);
     // 分段胶囊：自己可切换，他人只读
     row.append(SegmentedControl({
@@ -245,6 +253,32 @@ export class LobbyView extends BaseView {
     panel.append(rows, err, confirm, cancel);
     mask.append(panel);
     document.body.append(mask);
+  }
+
+  // ---------- 改名弹层 ----------
+
+  private openRenameDialog(current: string): void {
+    const mask = el('div', { style: 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;' });
+    const panel = el('div', { style: 'background:#fff;border-radius:14px;padding:16px;width:80vw;max-width:320px;' });
+    panel.append(el('div', { style: 'font-weight:600;font-size:15px;margin-bottom:10px;' }, ['修改昵称']));
+    const input = el('input', { style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px;' }) as HTMLInputElement;
+    input.value = current.replace('（主机）', '');
+    input.maxLength = 12;
+    panel.append(input);
+    const err = el('div', { style: 'color:#d33;font-size:12px;margin-top:6px;display:none;' });
+    const confirm = el('button', { class: 'btn btn-primary', style: 'width:100%;margin-top:10px;' }, ['保存']);
+    confirm.addEventListener('pointerdown', () => {
+      const name = input.value.trim();
+      if (!name) { err.style.display = 'block'; err.textContent = '昵称不能为空'; return; }
+      this.emit('ui:rename', name);
+      mask.remove();
+    });
+    const cancel = el('button', { class: 'btn btn-secondary', style: 'width:100%;margin-top:8px;' }, ['取消']);
+    cancel.addEventListener('pointerdown', () => mask.remove());
+    panel.append(err, confirm, cancel);
+    mask.append(panel);
+    document.body.append(mask);
+    setTimeout(() => input.focus(), 0);
   }
 
   // ---------- 邀请面板 ----------

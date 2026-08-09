@@ -402,4 +402,22 @@ wss.on('connection', (ws) => {
 
 server.listen(PORT, '::', () => {
   log(`大厅服务器 listening [::]:${PORT} (v4+v6 双栈, 页面 http://<ip>:${PORT}/ + ws 大厅)`);
+
+  // 心跳：每 30s ping 所有连接（协议层，浏览器自动回 pong）——防 NAT/光猫空闲超时断线
+  setInterval(() => {
+    for (const c of conns.values()) {
+      try { c.ws.ping(); } catch { /* 连接异常，close 事件会处理 */ }
+    }
+  }, 30000);
+
+  // 地址自动刷新：每 60s 重新枚举，变化时广播（蜂窝隐私地址轮换）
+  setInterval(() => {
+    const fresh = collectAddresses();
+    if (JSON.stringify(fresh) !== JSON.stringify(ADDRS)) {
+      ADDRS.v6 = fresh.v6;
+      ADDRS.v4 = fresh.v4;
+      log(`本机地址变化: v6=[${ADDRS.v6.join(', ')}] v4=[${ADDRS.v4.join(', ')}]`);
+      broadcastLobby('接入地址已更新，请重新分享邀请');
+    }
+  }, 60000);
 });
