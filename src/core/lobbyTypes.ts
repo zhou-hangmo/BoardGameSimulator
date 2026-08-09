@@ -29,6 +29,7 @@ export interface LobbyState {
   currentGame: string | null;   // 进行中的游戏 id（playing 时）
   you: string;                  // 本机 player id
   notice?: string;              // 提示（如"游戏结束"）
+  addresses?: { v6: string[]; v4: string[] };  // 服务器本机可达地址（邀请用）
 }
 
 /** 主机发起游戏时的座位分配 */
@@ -51,7 +52,8 @@ export type ClientMsg =
   | { type: 'set_seat'; wantPlay: boolean }
   | { type: 'start_game'; gameId: string; seats: SeatAssign[] }
   | { type: 'action'; payload: unknown }
-  | { type: 'back_to_lobby' };   // 主机中止游戏
+  | { type: 'back_to_lobby' }             // 主机中止游戏
+  | { type: 'kick_player'; playerId: string };  // 主机踢人
 
 /** 服务器 → 客户端消息 */
 export type ServerMsg =
@@ -60,4 +62,6 @@ export type ServerMsg =
   | { type: 'game_state'; payload: unknown }        // PlayerView（已按座位过滤）
   | { type: 'spectate'; payload: unknown }          // SpectateData（观战）
   | { type: 'back_to_lobby'; payload?: { notice?: string } }
+  | { type: 'peer_disconnected'; payload: { playerId: string; notice?: string } }  // 对局中玩家掉线
+  | { type: 'kicked'; payload: { notice?: string } }  // 被踢出
   | { type: 'error'; payload: { message: string } };

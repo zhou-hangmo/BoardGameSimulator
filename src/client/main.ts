@@ -107,6 +107,18 @@ function handleMsg(msg: { type: string; payload?: unknown }): void {
       showLobby();
       break;
     }
+    case 'peer_disconnected': {
+      const pd = msg.payload as { playerId: string; notice?: string };
+      ToastManager.show(pd.notice ?? '玩家掉线，等待重连…');
+      break;
+    }
+    case 'kicked': {
+      const k = msg.payload as { notice?: string } | undefined;
+      transport?.close();
+      transport = null;
+      document.body.innerHTML = `<div style="display:flex;height:100%;align-items:center;justify-content:center;font-family:sans-serif;color:#888;">${k?.notice ?? '已被移出大厅'}</div>`;
+      break;
+    }
     case 'error': {
       const e = msg.payload as { message: string };
       ToastManager.show(e.message);
@@ -154,6 +166,8 @@ bus.on('ui:set_seat', (wantPlay: boolean) => transport?.setSeat(!!wantPlay));
 bus.on('ui:rename', (name: string) => transport?.rename(name));
 // 大厅：主机发起游戏
 bus.on('ui:start_game', (gameId: string, seats: SeatAssign[]) => transport?.startGame(gameId, seats));
+// 大厅：主机踢人
+bus.on('ui:kick_player', (playerId: string) => transport?.kickPlayer(String(playerId)));
 // 游戏：动作
 bus.on(EVENTS.UI_PLAY_ACTION, (type: string, payload: unknown) => {
   if (!inGame) return;

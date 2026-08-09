@@ -74,12 +74,14 @@ async function main() {
 
     // ---------- 2. 手动切回观战（胶囊可切换） ----------
     await host.evaluate(() => {
-      const btn = document.querySelector('[data-pid="player-0"] [data-seat="spectator"]');
+      const pid = window.__bgs.myId;
+      const btn = document.querySelector(`[data-pid="${pid}"] [data-seat="spectator"]`);
       btn?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     });
     await poll(host, () => document.body.innerText.includes('1/2 人'), 10000, '游戏位计数变 1/2');
     await host.evaluate(() => {
-      const btn = document.querySelector('[data-pid="player-0"] [data-seat="player"]');
+      const pid = window.__bgs.myId;
+      const btn = document.querySelector(`[data-pid="${pid}"] [data-seat="player"]`);
       btn?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     });
     await poll(host, () => document.body.innerText.includes('2/2 人'), 10000, '切回游戏位 2/2');

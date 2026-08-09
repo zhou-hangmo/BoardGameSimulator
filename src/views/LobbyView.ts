@@ -22,6 +22,7 @@ function capacityLabel(g: GameMeta): string {
 }
 
 export class LobbyView extends BaseView {
+  private state: LobbyState | null = null;   // 最近一次大厅状态（邀请面板用）
   private seatDraft: Record<string, 'player' | 'spectator'> = {}; // 发起面板草稿
 
   constructor(parent: HTMLElement) {
@@ -34,6 +35,7 @@ export class LobbyView extends BaseView {
 
   /** 渲染大厅（服务器广播 lobby_state） */
   showLobby(state: LobbyState): void {
+    this.state = state;
     this.seatDraft = {};
     this.el.innerHTML = '';
     this.el.append(
@@ -133,6 +135,14 @@ export class LobbyView extends BaseView {
       onChange: (k) => this.emit('ui:set_seat', k === 'player'),
       disabled: !isMe,
     }));
+    // 主机：他人行显示"踢出"按钮
+    if (this.amHost(this.state) && !isMe) {
+      const kick = el('button', {
+        style: 'border:none;background:transparent;color:#d33;font-size:12px;padding:4px 2px;cursor:pointer;flex:none;',
+      }, ['踢出']);
+      kick.addEventListener('pointerdown', () => this.emit('ui:kick_player', p.id));
+      row.append(kick);
+    }
     return row;
   }
 
@@ -240,7 +250,17 @@ export class LobbyView extends BaseView {
   // ---------- 邀请面板 ----------
 
   private openInvitePanel(): void {
-    const url = `${location.origin}${location.pathname}?ws=1`;
+    const port = location.port || '80';
+    const addrs = this.state?.addresses;
+    const urls: string[] = [];
+    for (const v6 of addrs?.v6 ?? []) {
+      urls.push(`http://[${v6}]:${port}/?ws=1`);
+    }
+    const v4 = addrs?.v4?.[0];
+    if (v4) urls.push(`http://${v4}:${port}/?ws=1`);
+    urls.push(`${location.origin}${location.pathname}?ws=1`); // localhost 兜底
+    const primary = urls[0] ?? urls[urls.length - 1];
+
     const mask = el('div', { style: 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;' });
     const panel = el('div', {
       style: 'background:#fff;border-radius:14px;padding:16px;width:88vw;max-width:340px;text-align:center;',
@@ -249,18 +269,19 @@ export class LobbyView extends BaseView {
     const img = el('img', { style: 'width:220px;height:220px;margin:8px auto;display:block;border:4px solid #fff;border-radius:8px;' });
     img.alt = '邀请二维码';
     panel.append(img);
-    const ta = el('textarea', { readOnly: 'true', style: 'width:100%;height:48px;background:#f4f4f4;border:1px solid #ddd;border-radius:8px;font:12px monospace;box-sizing:border-box;padding:6px;' });
-    ta.value = url;
+    panel.append(el('div', { style: 'font-size:12px;color:var(--color-label3);margin-bottom:4px;' }, ['公网玩家用第一个（蜂窝/宽带 v6），连不上换下一个']));
+    const ta = el('textarea', { readOnly: 'true', style: 'width:100%;height:84px;background:#f4f4f4;border:1px solid #ddd;border-radius:8px;font:12px monospace;box-sizing:border-box;padding:6px;' });
+    ta.value = urls.join('\n');
     panel.append(ta);
     const close = el('button', { class: 'btn btn-secondary', style: 'width:100%;margin-top:8px;' }, ['关闭']);
     close.addEventListener('pointerdown', () => mask.remove());
     panel.append(close);
     mask.append(panel);
     document.body.append(mask);
-    void QRCode.toDataURL(url, { width: 440, margin: 1 }).then(u => { img.src = u; }).catch(() => { /* 二维码生成失败 */ });
+    void QRCode.toDataURL(primary, { width: 440, margin: 1 }).then(u => { img.src = u; }).catch(() => { /* 二维码生成失败 */ });
   }
 
-  private amHost(st: LobbyState): boolean {
-    return !!st.players.find(p => p.id === st.you)?.isHost;
+  private amHost(st: LobbyState | null): boolean {
+    return !!st?.players.find(p => p.id === st.you)?.isHost;
   }
 }

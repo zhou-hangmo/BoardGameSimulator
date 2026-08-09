@@ -46,6 +46,7 @@ export class WSTransport {
   startGame(gameId: string, seats: SeatAssign[]): void { this.post({ type: 'start_game', gameId, seats }); }
   sendAction(action: GameAction): void { this.post({ type: 'action', payload: action }); }
   backToLobby(): void { this.post({ type: 'back_to_lobby' }); }
+  kickPlayer(playerId: string): void { this.post({ type: 'kick_player', playerId }); }
 
   onMessage(cb: MsgCb): void { this.onMsgCb = cb; }
 

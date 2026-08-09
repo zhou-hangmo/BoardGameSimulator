@@ -6,6 +6,7 @@
 // ============================================================
 import { createServer } from 'http';
 import { promises as fs } from 'fs';
+import os from 'os';
 import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GameEngine } from '../src/core/engine';
@@ -52,6 +53,7 @@ interface Conn {
 let seq = 0;
 const conns = new Map<WebSocket, Conn>();       // 所有在线连接
 const playersCache = new Map<string, { name: string; wantPlay: boolean }>();  // 离线身份缓存（断线恢复）
+const kickedSet = new Set<string>();            // 被踢玩家（断开后不再缓存身份）
 let hostId = '';
 
 // 游戏会话（null = 大厅）
@@ -60,12 +62,46 @@ interface Session {
   engine: GameEngine;
   seats: Map<string, number>;   // playerId -> 游戏位置
   spectators: string[];
+  pendingReconnect: string | null;                  // 掉线等待重连的玩家
+  pendingTimer: ReturnType<typeof setTimeout> | null;
 }
 let session: Session | null = null;
 
 function log(msg: string): void {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 }
+
+// ========== 本机可达地址（邀请用） ==========
+
+/** v6 排序：隐私扩展地址（随机后缀）优先；EUI-64（含 ff:fe）次之；::1 结尾占位地址最后（实测不可达） */
+function v6Rank(addr: string): number {
+  const a = addr.toLowerCase();
+  if (a.endsWith('::1')) return 2;
+  if (a.includes('ff:fe')) return 1;
+  return 0;
+}
+
+function collectAddresses(): { v6: string[]; v4: string[] } {
+  const v6: string[] = [];
+  const v4: string[] = [];
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const ni of nets[name] ?? []) {
+      if (ni.internal) continue;
+      const fam = String(ni.family).toLowerCase();
+      if (fam.includes('6')) {
+        if (!ni.address.toLowerCase().startsWith('fe80')) v6.push(ni.address);
+      } else {
+        v4.push(ni.address);
+      }
+    }
+  }
+  v6.sort((a, b) => v6Rank(a) - v6Rank(b));
+  return { v6, v4 };
+}
+
+const ADDRS = collectAddresses();
+log(`本机可达地址: v6=[${ADDRS.v6.join(', ')}] v4=[${ADDRS.v4.join(', ')}]`);
 
 function send(ws: WebSocket, msg: unknown): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -82,6 +118,7 @@ function lobbyState(): LobbyState {
     games: GAMES,
     currentGame: session?.gameId ?? null,
     you: '', // 按连接填充
+    addresses: ADDRS,
   };
 }
 
@@ -125,6 +162,8 @@ function startSession(gameId: string, seats: SeatAssign[]): void {
     engine,
     seats: seatMap,
     spectators: seats.filter(s => s.seat === 'spectator').map(s => s.playerId),
+    pendingReconnect: null,
+    pendingTimer: null,
   };
   log(`游戏会话开始: ${gameId} 玩家=[${players.map(p => p.playerId).join(',')}] 观战=[${session.spectators.join(',')}]`);
 
@@ -160,9 +199,24 @@ function broadcastGameState(): void {
 function endSession(notice: string): void {
   if (!session) return;
   log(`游戏会话结束: ${notice}`);
+  if (session.pendingTimer) { clearTimeout(session.pendingTimer); session.pendingTimer = null; }
   session = null;
   broadcast({ type: 'back_to_lobby', payload: { notice } });
   broadcastLobby(notice);
+}
+
+/** 对局中玩家掉线：不立即中止，进入 30s 重连窗口 */
+function startReconnectWindow(playerId: string): void {
+  if (!session || session.pendingReconnect) return;
+  session.pendingReconnect = playerId;
+  log(`玩家 ${playerId} 掉线，进入 30s 重连窗口...`);
+  broadcast({ type: 'peer_disconnected', payload: { playerId, notice: '玩家掉线，等待重连…' } });
+  session.pendingTimer = setTimeout(() => {
+    if (session && session.pendingReconnect) {
+      log(`玩家 ${playerId} 重连超时，中止对局`);
+      endSession('玩家掉线超时');
+    }
+  }, 30000);
 }
 
 // ========== 消息处理 ==========
@@ -172,16 +226,48 @@ function handleMsg(c: Conn, msg: ClientMsg): void {
 
   switch (msg.type) {
     case 'register': {
-      // 断线恢复：携带 playerId 且缓存存在 → 复用身份
+      // 断线恢复/抢占：携带 playerId 且（缓存存在 或 同 id 在线）→ 恢复身份
       const savedId = String((msg as { playerId?: string }).playerId ?? '');
       const cached = playersCache.get(savedId);
-      if (cached && savedId && !Array.from(conns.values()).some(c => c.player.id === savedId)) {
+      const onlineSame = Array.from(conns.values()).some(c => c.player.id === savedId);
+      if (savedId && (cached || onlineSame)) {
+        const old = Array.from(conns.values()).find(c => c.player.id === savedId);
+        if (old) {
+          conns.delete(old.ws);
+          old.ws.close();
+        }
         player.id = savedId;
-        player.name = cached.name;
-        player.wantPlay = cached.wantPlay;
-        log(`${player.id} 身份恢复 (${cached.name})`);
+        if (cached) {
+          player.name = cached.name;
+          player.wantPlay = cached.wantPlay;
+        }
+        // 若处于重连窗口 → 清除等待，对局继续
+        if (session && session.pendingReconnect === savedId) {
+          if (session.pendingTimer) { clearTimeout(session.pendingTimer); session.pendingTimer = null; }
+          session.pendingReconnect = null;
+          log(`${savedId} 重连成功，对局继续`);
+          broadcastGameState();
+        }
+        log(`${player.id} 身份恢复${cached ? ` (${cached.name})` : '（在线抢占）'}`);
         broadcastLobby();
       }
+      break;
+    }
+    case 'kick_player': {
+      if (player.id !== hostId) { send(ws, { type: 'error', payload: { message: '只有主机可以踢人' } }); return; }
+      const targetId = String((msg as { playerId?: string }).playerId ?? '');
+      if (targetId === hostId) { send(ws, { type: 'error', payload: { message: '不能踢主机自己' } }); return; }
+      const target = Array.from(conns.values()).find(c => c.player.id === targetId);
+      if (!target) { send(ws, { type: 'error', payload: { message: '玩家不存在' } }); return; }
+      playersCache.delete(targetId);
+      kickedSet.add(targetId);
+      log(`主机踢出 ${targetId}`);
+      send(target.ws, { type: 'kicked', payload: { notice: '已被主机移出大厅' } });
+      // 对局中踢游戏位玩家 → 中止对局
+      if (session && session.seats.has(targetId)) {
+        endSession(`玩家 ${targetId} 被踢出`);
+      }
+      target.ws.close();
       break;
     }
     case 'rename': {
@@ -238,8 +324,12 @@ function handleMsg(c: Conn, msg: ClientMsg): void {
 
 function removePlayer(c: Conn, reason: string): void {
   conns.delete(c.ws);
-  // 缓存身份供断线恢复（仅大厅玩家，不缓存游戏内状态）
-  playersCache.set(c.player.id, { name: c.player.name, wantPlay: c.player.wantPlay });
+  // 缓存身份供断线恢复（被踢者除外）
+  if (kickedSet.has(c.player.id)) {
+    kickedSet.delete(c.player.id);
+  } else {
+    playersCache.set(c.player.id, { name: c.player.name, wantPlay: c.player.wantPlay });
+  }
   log(`${c.player.id} 断开 (${reason})，剩余 ${conns.size}`);
   if (c.player.id === hostId && conns.size > 0) {
     // 主机转移给最早连接者
@@ -247,10 +337,15 @@ function removePlayer(c: Conn, reason: string): void {
     log(`主机转移 → ${hostId}`);
   }
   if (session) {
-    const inGame = session.seats.has(c.player.id) || session.spectators.includes(c.player.id);
-    if (inGame && session.seats.has(c.player.id)) {
-      endSession(`玩家 ${c.player.id} 掉线`);
+    if (session.seats.has(c.player.id)) {
+      // 对局中游戏位玩家断开：同 id 已重连则不处理；否则进重连窗口
+      const reconnected = Array.from(conns.values()).some(x => x.player.id === c.player.id);
+      if (!reconnected) {
+        startReconnectWindow(c.player.id);
+      }
     }
+    // 观战玩家断开：从观战列表移除即可
+    session.spectators = session.spectators.filter(p => p !== c.player.id);
   }
   broadcastLobby();
 }
@@ -305,6 +400,6 @@ wss.on('connection', (ws) => {
   ws.on('error', () => removePlayer(c, 'error'));
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  log(`大厅服务器 listening 0.0.0.0:${PORT} (页面 http://<ip>:${PORT}/ + ws 大厅)`);
+server.listen(PORT, '::', () => {
+  log(`大厅服务器 listening [::]:${PORT} (v4+v6 双栈, 页面 http://<ip>:${PORT}/ + ws 大厅)`);
 });

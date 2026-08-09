@@ -3698,6 +3698,7 @@ var require_websocket_server = __commonJS({
 // scripts/host-server.ts
 var import_http = require("http");
 var import_fs = require("fs");
+var import_os = __toESM(require("os"), 1);
 var import_path = __toESM(require("path"), 1);
 
 // node_modules/ws/wrapper.mjs
@@ -4691,11 +4692,39 @@ var GAMES = [{
 var seq = 0;
 var conns = /* @__PURE__ */ new Map();
 var playersCache = /* @__PURE__ */ new Map();
+var kickedSet = /* @__PURE__ */ new Set();
 var hostId = "";
 var session = null;
 function log(msg) {
   console.log(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${msg}`);
 }
+function v6Rank(addr) {
+  const a = addr.toLowerCase();
+  if (a.endsWith("::1")) return 2;
+  if (a.includes("ff:fe")) return 1;
+  return 0;
+}
+function collectAddresses() {
+  var _a;
+  const v6 = [];
+  const v4 = [];
+  const nets = import_os.default.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const ni of (_a = nets[name]) != null ? _a : []) {
+      if (ni.internal) continue;
+      const fam = String(ni.family).toLowerCase();
+      if (fam.includes("6")) {
+        if (!ni.address.toLowerCase().startsWith("fe80")) v6.push(ni.address);
+      } else {
+        v4.push(ni.address);
+      }
+    }
+  }
+  v6.sort((a, b) => v6Rank(a) - v6Rank(b));
+  return { v6, v4 };
+}
+var ADDRS = collectAddresses();
+log(`\u672C\u673A\u53EF\u8FBE\u5730\u5740: v6=[${ADDRS.v6.join(", ")}] v4=[${ADDRS.v4.join(", ")}]`);
 function send(ws, msg) {
   if (ws.readyState === import_websocket.default.OPEN) ws.send(JSON.stringify(msg));
 }
@@ -4709,8 +4738,9 @@ function lobbyState() {
     players: Array.from(conns.values()).map((c) => c.player),
     games: GAMES,
     currentGame: (_a = session == null ? void 0 : session.gameId) != null ? _a : null,
-    you: ""
+    you: "",
     // 按连接填充
+    addresses: ADDRS
   };
 }
 function broadcastLobby(notice) {
@@ -4758,7 +4788,9 @@ function startSession(gameId, seats) {
     gameId,
     engine,
     seats: seatMap,
-    spectators: seats.filter((s2) => s2.seat === "spectator").map((s2) => s2.playerId)
+    spectators: seats.filter((s2) => s2.seat === "spectator").map((s2) => s2.playerId),
+    pendingReconnect: null,
+    pendingTimer: null
   };
   log(`\u6E38\u620F\u4F1A\u8BDD\u5F00\u59CB: ${gameId} \u73A9\u5BB6=[${players.map((p) => p.playerId).join(",")}] \u89C2\u6218=[${session.spectators.join(",")}]`);
   broadcast({ type: "game_started", payload: { gameId, seats: Object.fromEntries(seatMap), spectators: session.spectators } });
@@ -4790,28 +4822,86 @@ function broadcastGameState() {
 function endSession(notice) {
   if (!session) return;
   log(`\u6E38\u620F\u4F1A\u8BDD\u7ED3\u675F: ${notice}`);
+  if (session.pendingTimer) {
+    clearTimeout(session.pendingTimer);
+    session.pendingTimer = null;
+  }
   session = null;
   broadcast({ type: "back_to_lobby", payload: { notice } });
   broadcastLobby(notice);
 }
+function startReconnectWindow(playerId) {
+  if (!session || session.pendingReconnect) return;
+  session.pendingReconnect = playerId;
+  log(`\u73A9\u5BB6 ${playerId} \u6389\u7EBF\uFF0C\u8FDB\u5165 30s \u91CD\u8FDE\u7A97\u53E3...`);
+  broadcast({ type: "peer_disconnected", payload: { playerId, notice: "\u73A9\u5BB6\u6389\u7EBF\uFF0C\u7B49\u5F85\u91CD\u8FDE\u2026" } });
+  session.pendingTimer = setTimeout(() => {
+    if (session && session.pendingReconnect) {
+      log(`\u73A9\u5BB6 ${playerId} \u91CD\u8FDE\u8D85\u65F6\uFF0C\u4E2D\u6B62\u5BF9\u5C40`);
+      endSession("\u73A9\u5BB6\u6389\u7EBF\u8D85\u65F6");
+    }
+  }, 3e4);
+}
 function handleMsg(c, msg) {
-  var _a, _b;
+  var _a, _b, _c;
   const { ws, player } = c;
   switch (msg.type) {
     case "register": {
       const savedId = String((_a = msg.playerId) != null ? _a : "");
       const cached = playersCache.get(savedId);
-      if (cached && savedId && !Array.from(conns.values()).some((c2) => c2.player.id === savedId)) {
+      const onlineSame = Array.from(conns.values()).some((c2) => c2.player.id === savedId);
+      if (savedId && (cached || onlineSame)) {
+        const old = Array.from(conns.values()).find((c2) => c2.player.id === savedId);
+        if (old) {
+          conns.delete(old.ws);
+          old.ws.close();
+        }
         player.id = savedId;
-        player.name = cached.name;
-        player.wantPlay = cached.wantPlay;
-        log(`${player.id} \u8EAB\u4EFD\u6062\u590D (${cached.name})`);
+        if (cached) {
+          player.name = cached.name;
+          player.wantPlay = cached.wantPlay;
+        }
+        if (session && session.pendingReconnect === savedId) {
+          if (session.pendingTimer) {
+            clearTimeout(session.pendingTimer);
+            session.pendingTimer = null;
+          }
+          session.pendingReconnect = null;
+          log(`${savedId} \u91CD\u8FDE\u6210\u529F\uFF0C\u5BF9\u5C40\u7EE7\u7EED`);
+          broadcastGameState();
+        }
+        log(`${player.id} \u8EAB\u4EFD\u6062\u590D${cached ? ` (${cached.name})` : "\uFF08\u5728\u7EBF\u62A2\u5360\uFF09"}`);
         broadcastLobby();
       }
       break;
     }
+    case "kick_player": {
+      if (player.id !== hostId) {
+        send(ws, { type: "error", payload: { message: "\u53EA\u6709\u4E3B\u673A\u53EF\u4EE5\u8E22\u4EBA" } });
+        return;
+      }
+      const targetId = String((_b = msg.playerId) != null ? _b : "");
+      if (targetId === hostId) {
+        send(ws, { type: "error", payload: { message: "\u4E0D\u80FD\u8E22\u4E3B\u673A\u81EA\u5DF1" } });
+        return;
+      }
+      const target = Array.from(conns.values()).find((c2) => c2.player.id === targetId);
+      if (!target) {
+        send(ws, { type: "error", payload: { message: "\u73A9\u5BB6\u4E0D\u5B58\u5728" } });
+        return;
+      }
+      playersCache.delete(targetId);
+      kickedSet.add(targetId);
+      log(`\u4E3B\u673A\u8E22\u51FA ${targetId}`);
+      send(target.ws, { type: "kicked", payload: { notice: "\u5DF2\u88AB\u4E3B\u673A\u79FB\u51FA\u5927\u5385" } });
+      if (session && session.seats.has(targetId)) {
+        endSession(`\u73A9\u5BB6 ${targetId} \u88AB\u8E22\u51FA`);
+      }
+      target.ws.close();
+      break;
+    }
     case "rename": {
-      const name = String((_b = msg.name) != null ? _b : "").trim().slice(0, 12) || player.name;
+      const name = String((_c = msg.name) != null ? _c : "").trim().slice(0, 12) || player.name;
       player.name = name;
       log(`${player.id} \u6539\u540D \u2192 ${name}`);
       broadcastLobby();
@@ -4871,17 +4961,24 @@ function handleMsg(c, msg) {
 }
 function removePlayer(c, reason) {
   conns.delete(c.ws);
-  playersCache.set(c.player.id, { name: c.player.name, wantPlay: c.player.wantPlay });
+  if (kickedSet.has(c.player.id)) {
+    kickedSet.delete(c.player.id);
+  } else {
+    playersCache.set(c.player.id, { name: c.player.name, wantPlay: c.player.wantPlay });
+  }
   log(`${c.player.id} \u65AD\u5F00 (${reason})\uFF0C\u5269\u4F59 ${conns.size}`);
   if (c.player.id === hostId && conns.size > 0) {
     hostId = Array.from(conns.values())[0].player.id;
     log(`\u4E3B\u673A\u8F6C\u79FB \u2192 ${hostId}`);
   }
   if (session) {
-    const inGame = session.seats.has(c.player.id) || session.spectators.includes(c.player.id);
-    if (inGame && session.seats.has(c.player.id)) {
-      endSession(`\u73A9\u5BB6 ${c.player.id} \u6389\u7EBF`);
+    if (session.seats.has(c.player.id)) {
+      const reconnected = Array.from(conns.values()).some((x) => x.player.id === c.player.id);
+      if (!reconnected) {
+        startReconnectWindow(c.player.id);
+      }
     }
+    session.spectators = session.spectators.filter((p) => p !== c.player.id);
   }
   broadcastLobby();
 }
@@ -4934,6 +5031,6 @@ wss.on("connection", (ws) => {
   ws.on("close", () => removePlayer(c, "close"));
   ws.on("error", () => removePlayer(c, "error"));
 });
-server.listen(PORT, "0.0.0.0", () => {
-  log(`\u5927\u5385\u670D\u52A1\u5668 listening 0.0.0.0:${PORT} (\u9875\u9762 http://<ip>:${PORT}/ + ws \u5927\u5385)`);
+server.listen(PORT, "::", () => {
+  log(`\u5927\u5385\u670D\u52A1\u5668 listening [::]:${PORT} (v4+v6 \u53CC\u6808, \u9875\u9762 http://<ip>:${PORT}/ + ws \u5927\u5385)`);
 });
