@@ -4714,7 +4714,7 @@ function collectAddresses() {
   const nets = import_os.default.networkInterfaces();
   for (const name of Object.keys(nets)) {
     const isCell = /rmnet|ccmni|radio|wwan/i.test(name);
-    const isLan = /wlan|eth|enp|ens/i.test(name);
+    const isLan = /wlan|eth|enp|ens|ap0|softap|wlan1|wlan2|p2p/i.test(name);
     for (const ni of (_a = nets[name]) != null ? _a : []) {
       if (ni.internal) continue;
       const fam = String(ni.family).toLowerCase();

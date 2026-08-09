@@ -17,10 +17,11 @@ interface Props {
 }
 
 export function SegmentedControl({ options, value, onChange, disabled }: Props): HTMLElement {
-  const idx = Math.max(0, options.findIndex(o => o.key === value));
+  let idx = Math.max(0, options.findIndex(o => o.key === value));
 
+  // 轨道
   const track = el('div', {
-    style: `display:inline-flex;position:relative;background:var(--color-fill3, rgba(118,118,128,.12));border-radius:999px;padding:2px;${disabled ? 'opacity:.55;' : ''}`,
+    style: `position:relative;display:flex;background:var(--color-fill3, rgba(118,118,128,.12));border-radius:999px;padding:2px;${disabled ? 'opacity:.55;' : ''}`,
   });
 
   // 白色滑动指示胶囊（宽度 = 选中项宽度，translateX 按位置移动）
@@ -28,6 +29,14 @@ export function SegmentedControl({ options, value, onChange, disabled }: Props):
     style: `position:absolute;top:2px;left:2px;width:calc(${100 / options.length}% - 2px);height:calc(100% - 4px);background:#fff;border-radius:999px;box-shadow:0 1px 3px rgba(0,0,0,.12);transition:transform .18s cubic-bezier(0.23,1,0.32,1);transform:translateX(${idx * 100}%);`,
   });
   track.append(indicator);
+
+  // 外部切换时更新指示器（带动画）
+  (track as HTMLElement & { setValue?: (k: string) => void }).setValue = (k: string): void => {
+    const i = Math.max(0, options.findIndex(o => o.key === k));
+    if (i === idx) return;
+    idx = i;
+    indicator.style.transform = `translateX(${idx * 100}%)`;
+  };
 
   for (const opt of options) {
     const btn = el('button', {

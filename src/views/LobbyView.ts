@@ -299,7 +299,7 @@ export class LobbyView extends BaseView {
     });
     panel.append(el('div', { style: 'font-weight:600;font-size:15px;margin-bottom:8px;' }, ['邀请玩家加入']));
 
-    // 胶囊切换
+    // 胶囊切换（setValue 驱动滑动动画 + 内容重渲染）
     const seg = SegmentedControl({
       options: [
         { key: 'lan', label: '局域网' },
@@ -308,6 +308,7 @@ export class LobbyView extends BaseView {
       value: mode,
       onChange: (k) => {
         mode = k as 'lan' | 'wan';
+        (seg as HTMLElement & { setValue?: (k: string) => void }).setValue?.(mode);
         render();
       },
     });
@@ -319,9 +320,15 @@ export class LobbyView extends BaseView {
     const render = (): void => {
       body.innerHTML = '';
       const urls = mode === 'wan' ? wanUrls : lanUrls;
-      const hint = mode === 'wan' ? '公网玩家（异地/蜂窝）扫此码' : '同一 WiFi 玩家扫此码';
+      const hint = mode === 'wan' ? '公网玩家（异地/蜂窝）扫此码' : '同一 WiFi/热点玩家扫此码';
       if (urls.length === 0) {
-        body.append(el('div', { style: 'color:var(--color-label3);font-size:13px;padding:16px 0;' }, ['未检测到可用地址']));
+        const empty = el('div', { style: 'color:var(--color-label3);font-size:13px;padding:20px 0;line-height:1.6;' });
+        empty.append(
+          mode === 'wan'
+            ? '未检测到蜂窝网络地址\n请确认手机使用蜂窝流量（4G/5G）'
+            : '未检测到局域网地址\n请连接 WiFi 或开启热点，等待自动刷新',
+        );
+        body.append(empty);
         return;
       }
       const img = el('img', { style: 'width:220px;height:220px;margin:8px auto;display:block;border:4px solid #fff;border-radius:8px;' });
