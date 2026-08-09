@@ -36,7 +36,8 @@ const GAMES: GameMeta[] = [{
   id: battleshipTest.id,
   name: battleshipTest.name,
   description: '双人策略海战',
-  playerCount: 2,
+  minPlayers: 2,
+  maxPlayers: 2,
   ready: true,
 }];
 
@@ -101,8 +102,8 @@ function startSession(gameId: string, seats: SeatAssign[]): void {
   const meta = GAMES.find(g => g.id === gameId);
   if (!meta) { log(`未知游戏: ${gameId}`); return; }
   const players = seats.filter(s => s.seat === 'player');
-  if (players.length !== meta.playerCount) {
-    log(`游戏位数量不符: 需要 ${meta.playerCount}，实际 ${players.length}`);
+  if (players.length < meta.minPlayers || players.length > meta.maxPlayers) {
+    log(`游戏位数量不符: 允许 ${meta.minPlayers}~${meta.maxPlayers}，实际 ${players.length}`);
     return;
   }
   const engine = new GameEngine(s0);
@@ -112,9 +113,9 @@ function startSession(gameId: string, seats: SeatAssign[]): void {
     log(`配置错误: ${errs.map(e => e.message).join('; ')}`);
     return;
   }
-  engine.startGame(meta.playerCount);
+  engine.startGame(players.length);
   const s = engine.getState();
-  engine.loadState({ ...s, extra: initBoards(meta.playerCount), phase: 'idle' });
+  engine.loadState({ ...s, extra: initBoards(players.length), phase: 'idle' });
 
   const seatMap = new Map<string, number>();
   players.forEach((p, i) => seatMap.set(p.playerId, i));
@@ -282,7 +283,10 @@ server.on('upgrade', (req, socket, head) => {
 
 wss.on('connection', (ws) => {
   const id = `player-${seq++}`;
-  const player: LobbyPlayer = { id, name: `玩家${seq}`, isHost: conns.size === 0, wantPlay: false };
+  // 自动分配座位：游戏位有空则进游戏位，否则观战
+  const maxCap = GAMES.filter(g => g.ready)[0]?.maxPlayers ?? 2;
+  const seated = Array.from(conns.values()).filter(c => c.player.wantPlay).length;
+  const player: LobbyPlayer = { id, name: `玩家${seq}`, isHost: conns.size === 0, wantPlay: seated < maxCap };
   const c: Conn = { ws, player };
   conns.set(ws, c);
   if (conns.size === 1) hostId = id;

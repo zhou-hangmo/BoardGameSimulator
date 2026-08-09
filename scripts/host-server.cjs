@@ -993,7 +993,8 @@ var GAMES = [{
   id: battleshipTest.id,
   name: battleshipTest.name,
   description: "\u53CC\u4EBA\u7B56\u7565\u6D77\u6218",
-  playerCount: 2,
+  minPlayers: 2,
+  maxPlayers: 2,
   ready: true
 }];
 var seq = 0;
@@ -1045,8 +1046,8 @@ function startSession(gameId, seats) {
     return;
   }
   const players = seats.filter((s2) => s2.seat === "player");
-  if (players.length !== meta.playerCount) {
-    log(`\u6E38\u620F\u4F4D\u6570\u91CF\u4E0D\u7B26: \u9700\u8981 ${meta.playerCount}\uFF0C\u5B9E\u9645 ${players.length}`);
+  if (players.length < meta.minPlayers || players.length > meta.maxPlayers) {
+    log(`\u6E38\u620F\u4F4D\u6570\u91CF\u4E0D\u7B26: \u5141\u8BB8 ${meta.minPlayers}~${meta.maxPlayers}\uFF0C\u5B9E\u9645 ${players.length}`);
     return;
   }
   const engine = new GameEngine(s0);
@@ -1056,9 +1057,9 @@ function startSession(gameId, seats) {
     log(`\u914D\u7F6E\u9519\u8BEF: ${errs.map((e) => e.message).join("; ")}`);
     return;
   }
-  engine.startGame(meta.playerCount);
+  engine.startGame(players.length);
   const s = engine.getState();
-  engine.loadState({ ...s, extra: initBoards(meta.playerCount), phase: "idle" });
+  engine.loadState({ ...s, extra: initBoards(players.length), phase: "idle" });
   const seatMap = /* @__PURE__ */ new Map();
   players.forEach((p, i) => seatMap.set(p.playerId, i));
   session = {
@@ -1216,7 +1217,9 @@ server.on("upgrade", (req, socket, head) => {
 });
 wss.on("connection", (ws) => {
   const id = `player-${seq++}`;
-  const player = { id, name: `\u73A9\u5BB6${seq}`, isHost: conns.size === 0, wantPlay: false };
+  const maxCap = GAMES.filter((g) => g.ready)[0]?.maxPlayers ?? 2;
+  const seated = Array.from(conns.values()).filter((c2) => c2.player.wantPlay).length;
+  const player = { id, name: `\u73A9\u5BB6${seq}`, isHost: conns.size === 0, wantPlay: seated < maxCap };
   const c = { ws, player };
   conns.set(ws, c);
   if (conns.size === 1) hostId = id;

@@ -63,24 +63,32 @@ async function main() {
       p.on('console', m => { if (m.type() === 'error') { pageErrors.push(`console.error: ${m.text()}`); console.log(`  [${tag}][console.error] ${m.text().slice(0, 200)}`); } });
     }
 
-    // ---------- 1. 两玩家接入大厅 ----------
+    // ---------- 1. 两玩家接入大厅（自动分配游戏位） ----------
     await host.goto(`${ORIGIN}/?ws=1`, { waitUntil: 'load', timeout: 30000 });
     await guest.goto(`${ORIGIN}/?ws=1`, { waitUntil: 'load', timeout: 30000 });
     await poll(host, () => document.body.innerText.includes('游戏大厅') && document.body.innerText.includes('2 人在线'), 15000, 'host 大厅 2 人在线');
+    await poll(host, () => document.body.innerText.includes('2/2 人'), 10000, '游戏位自动分配 2/2');
     await poll(guest, () => document.body.innerText.includes('游戏大厅'), 10000, 'guest 大厅');
-    const lobbyTxt = await host.evaluate(() => document.body.innerText.slice(0, 120));
-    record('玩家接入大厅', lobbyTxt.includes('2 人在线') && lobbyTxt.includes('主机') && lobbyTxt.includes('海战棋'), lobbyTxt.replace(/\n/g, '|'));
+    const lobbyTxt = await host.evaluate(() => document.body.innerText.slice(0, 160));
+    record('玩家接入大厅(自动分配)', lobbyTxt.includes('2 人在线') && lobbyTxt.includes('2/2 人') && lobbyTxt.includes('海战棋'), lobbyTxt.replace(/\n/g, '|'));
 
-    // ---------- 2. 双方声明想玩 ----------
-    await tap(host, '我想玩');
-    await tap(guest, '我想玩');
-    await poll(host, () => document.body.innerText.includes('🎯 想玩'), 10000, '双方想玩标记');
-    record('座位声明', true, '双方 🎯 想玩');
+    // ---------- 2. 手动切回观战（胶囊可切换） ----------
+    await host.evaluate(() => {
+      const btn = document.querySelector('[data-pid="player-0"] [data-seat="spectator"]');
+      btn?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    });
+    await poll(host, () => document.body.innerText.includes('1/2 人'), 10000, '游戏位计数变 1/2');
+    await host.evaluate(() => {
+      const btn = document.querySelector('[data-pid="player-0"] [data-seat="player"]');
+      btn?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    });
+    await poll(host, () => document.body.innerText.includes('2/2 人'), 10000, '切回游戏位 2/2');
+    record('座位手动切换', true, '胶囊切换 游戏↔观战');
 
-    // ---------- 3. 主机发起（座位面板默认 2 游戏位） ----------
+    // ---------- 3. 主机发起（座位面板默认按声明） ----------
     await tap(host, '发起');
     await poll(host, () => !!document.getElementById('start-panel'), 10000, '座位面板出现');
-    await tap(host, '✓ 发起游戏');
+    await tap(host, '发起游戏');
 
     // ---------- 4. 进入游戏（布阵） ----------
     await poll(host, () => document.querySelectorAll('.bs-grid').length >= 1, 20000, 'host 布阵棋盘');

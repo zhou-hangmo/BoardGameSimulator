@@ -8,7 +8,8 @@ export interface GameMeta {
   id: string;
   name: string;
   description: string;
-  playerCount: number;
+  minPlayers: number;   // 允许游戏位数量下限
+  maxPlayers: number;   // 允许游戏位数量上限（可与 min 相同）
   ready: boolean;
 }
 
