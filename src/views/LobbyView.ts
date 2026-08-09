@@ -1,18 +1,16 @@
 // ============================================================
-// BoardGameSimulator — 房间大厅 / 等待 / 客码视图
-// 大厅分上下两区：玩家（上）/ 观战（下）；空闲玩家行带「观战」按钮
+// BoardGameSimulator — 游戏大厅视图（常驻）
+// 玩家列表（名字/主机/座位声明）+ 游戏库（从机浏览/主机发起）
+// 主机发起：座位分配面板（每个玩家可选 游戏位/观战位）
 // ============================================================
 import { BaseView } from './BaseView';
-import { el, qs, qso } from '../utils/dom';
-
-export interface PlayerInfo {
-  name: string;
-  isHost: boolean;
-  isSpectator?: boolean;  // 观战区
-  status?: string;
-}
+import { el } from '../utils/dom';
+import type { LobbyState, LobbyPlayer, GameMeta, SeatAssign } from '../core/lobbyTypes';
 
 export class LobbyView extends BaseView {
+  private state: LobbyState | null = null;
+  private seatDraft: Record<string, 'player' | 'spectator'> = {}; // 发起面板草稿
+
   constructor(parent: HTMLElement) {
     super(parent);
   }
@@ -21,149 +19,188 @@ export class LobbyView extends BaseView {
     return el('div', { style: 'display:flex;flex-direction:column;height:100%;' });
   }
 
-  /** 显示房间大厅（主持人视角） */
-  showLobby(code: string, players: PlayerInfo[], qrImg: string, maxPlayers = 2): void {
-    this.el.innerHTML = this.buildLobbyHtml(code, players, qrImg, maxPlayers);
-    this.bindLobbyButtons();
+  /** 渲染大厅（服务器广播 lobby_state） */
+  showLobby(state: LobbyState): void {
+    this.state = state;
+    this.seatDraft = {};
+    this.el.innerHTML = '';
+    this.el.append(
+      this.buildHeader(state),
+      this.buildPlayers(state),
+      this.buildGames(state),
+      this.buildStatus(state),
+    );
   }
 
-  /** 显示等待房间（非主持人视角） */
-  showWaitRoom(code: string, players: PlayerInfo[]): void {
-    this.el.innerHTML = this.buildWaitHtml(code, players);
+  private buildHeader(st: LobbyState): HTMLElement {
+    const bar = el('div', { class: 'nav-bar' });
+    bar.append(
+      el('span', { class: 'nav-title' }, [`游戏大厅 · ${st.players.length} 人在线`]),
+    );
+    return bar;
   }
 
-  /** 显示客人 QR 码 */
-  showGuestQr(code: string, qrImg: string): void {
-    this.el.innerHTML = this.buildGuestQrHtml(code, qrImg);
-    qso('#btn-log-guest', this.el)?.addEventListener('pointerdown', () => {
-      this.emit('ui:show_log');
+  private buildPlayers(st: LobbyState): HTMLElement {
+    const box = el('div', { style: 'padding:10px 14px;' });
+    box.append(el('div', { class: 'section-hdr' }, ['玩家']));
+    const list = el('div', { style: 'display:flex;flex-direction:column;gap:6px;' });
+    for (const p of st.players) {
+      list.appendChild(this.playerRow(p, st));
+    }
+    box.append(list);
+    return box;
+  }
+
+  private playerRow(p: LobbyPlayer, st: LobbyState): HTMLElement {
+    const row = el('div', { class: 'player-row' });
+    row.append(el('span', { class: 'dot green' }));
+    row.append(el('span', {}, [`${p.name}${p.isHost ? ' (主机)' : ''}`]));
+    row.append(el('span', { style: 'margin-left:auto;font-size:12px;color:var(--label3);' }, [p.wantPlay ? '🎯 想玩' : '👁 观战']));
+    if (p.id === st.you) {
+      const btn = el('button', {
+        class: 'btn btn-secondary',
+        style: 'font-size:12px;padding:3px 10px;margin-left:8px;',
+      }, [p.wantPlay ? '改观战' : '我想玩']);
+      btn.addEventListener('pointerdown', () => this.emit('ui:set_seat', !p.wantPlay));
+      row.append(btn);
+    }
+    return row;
+  }
+
+  private buildGames(st: LobbyState): HTMLElement {
+    const box = el('div', { style: 'padding:0 14px;' });
+    box.append(el('div', { class: 'section-hdr' }, ['游戏库']));
+    const list = el('div', { style: 'display:flex;flex-direction:column;gap:8px;' });
+    for (const g of st.games) {
+      list.appendChild(this.gameCard(g, st));
+    }
+    box.append(list);
+    return box;
+  }
+
+  private gameCard(g: GameMeta, st: LobbyState): HTMLElement {
+    const card = el('div', {
+      style: 'display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--bg2,#f7f7f7);',
     });
+    card.append(el('div', { style: 'font-size:20px;' }, ['🃏']));
+    const body = el('div', { style: 'flex:1;min-width:0;' });
+    body.append(
+      el('div', { style: 'font-weight:600;' }, [g.name]),
+      el('div', { style: 'font-size:12px;color:var(--label2);' }, [`${g.description} · ${g.playerCount}人`]),
+    );
+    card.append(body);
+    if (p_isHost(st, this.myId())) {
+      const btn = el('button', { class: 'btn btn-primary', style: 'font-size:13px;padding:6px 14px;' }, ['发起']);
+      btn.addEventListener('pointerdown', () => this.openStartPanel(g, st));
+      card.append(btn);
+    } else {
+      card.append(el('span', { style: 'font-size:12px;color:var(--label3);' }, ['等待主机发起']));
+    }
+    return card;
   }
 
-  /** 显示游戏详情（创建房间前） */
-  showGameDetail(gameName: string, description: string, playerCount: string, gameId: string): void {
-    this.el.innerHTML = this.buildGameDetailHtml(gameName, description, playerCount);
-    qs('#btn-create', this.el).addEventListener('pointerdown', () => {
-      this.emit('ui:create_room', gameId);
-    });
-  }
-
-  // ========== HTML builders ==========
-
-  private buildLobbyHtml(code: string, players: PlayerInfo[], qrImg: string, maxPlayers: number): string {
-    const validCount = players.filter(p => !p.isSpectator).length;
-    const canStart = validCount >= maxPlayers;
-    return `
-      <div class="nav-bar"><span class="nav-title">房间大厅</span></div>
-       <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
-        <div class="sec-body">
-          <div class="room-code">
-            <div class="code">${code}</div>
-            <div style="color:var(--label2);margin-top:4px;">分享给好友</div>
-          </div>
-          ${qrImg
-            ? `<div style="text-align:center;padding:8px 0;">
-                <img src="${qrImg}" style="width:280px;height:280px;max-width:90vw;border-radius:12px;" />
-                <div style="color:var(--label3);font-size:13px;margin-top:4px;">让好友扫此码加入</div>
-              </div>`
-            : ''}
-           <div class="section-hdr">玩家 (${validCount}/${maxPlayers})</div>
-          ${this.buildPlayerRows(players.filter(p => !p.isSpectator), true)}
-          ${players.some(p => p.isSpectator) ? `<div class="section-hdr" style="margin-top:12px;">观战 (${players.filter(p => p.isSpectator).length})</div>` : ''}
-          ${this.buildPlayerRows(players.filter(p => p.isSpectator), true)}
-          <button id="btn-start" class="btn btn-primary btn-block" style="margin-top:16px;" ${canStart ? '' : 'disabled'}>开始游戏</button>
-          <button id="btn-share" class="btn btn-secondary btn-block" style="margin-top:8px;">📤 分享房间</button>
-          <button id="btn-scan-guest" class="btn btn-secondary btn-block" style="margin-top:4px;">📷 扫访客码</button>
-          <button id="btn-log" class="btn btn-secondary btn-block" style="margin-top:4px;">📋 记录</button>
-        </div>
-      </div>`;
-  }
-
-  private buildWaitHtml(code: string, players: PlayerInfo[]): string {
-    return `
-      <div class="nav-bar"><span class="nav-title">等待开局</span></div>
-       <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
-        <div class="sec-body">
-          <div class="room-code"><div class="code">${code}</div></div>
-          <div class="section-hdr">玩家 (${players.filter(p => !p.isSpectator).length})</div>
-          ${this.buildPlayerRows(players.filter(p => !p.isSpectator))}
-          ${players.some(p => p.isSpectator) ? `<div class="section-hdr" style="margin-top:12px;">观战 (${players.filter(p => p.isSpectator).length})</div>` : ''}
-          ${this.buildPlayerRows(players.filter(p => p.isSpectator))}
-          <div style="text-align:center;padding:32px;color:var(--label3);">等待主持人开局...</div>
-        </div>
-      </div>`;
-  }
-
-  private buildGuestQrHtml(code: string, qrImg: string): string {
-    return `
-      <div class="nav-bar"><span class="nav-title">请主持人扫码</span></div>
-      <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
-        <div class="sec-body" style="text-align:center;">
-          <div class="room-code"><div class="code">${code}</div></div>
-          ${qrImg
-            ? `<img src="${qrImg}" style="width:280px;height:280px;max-width:90vw;border-radius:12px;" />
-               <div style="color:var(--label3);font-size:13px;margin-top:8px;">请让主持人扫描此码完成连接</div>`
-            : `<div style="color:var(--label2);font-size:14px;padding:16px 0;">等待主持人接入...</div>`}
-          <button id="btn-log-guest" class="btn btn-secondary btn-block" style="margin-top:8px;">📋 记录</button>
-        </div>
-      </div>`;
-  }
-
-  private buildGameDetailHtml(gameName: string, description: string, playerCount: string): string {
-    return `
-      <div class="nav-bar"><span class="nav-title">${gameName}</span></div>
-       <div class="scroll" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch">
-        <div class="sec-body">
-          <div class="section-hdr">游戏详情</div>
-          <div class="cell">
-            <div class="cell-body">
-              <div class="cell-title">${gameName}</div>
-              <div class="cell-subtitle">${description} · ${playerCount}人</div>
-            </div>
-          </div>
-          <button id="btn-create" class="btn btn-primary btn-block" style="margin-top:16px;">创建房间</button>
-        </div>
-      </div>`;
-  }
-
-  private buildPlayerRows(players: PlayerInfo[], withActions = false): string {
-    return players.map(p => {
-      const tag = p.isSpectator ? ' (观战)' : p.isHost ? ' (主持人)' : '';
-      let btn = `<span style="margin-left:auto;font-size:12px;color:var(--label3)">${p.status || ''}</span>`;
-      if (withActions && !p.isSpectator) {
-        btn = `<button data-spectate-name="${p.name}" class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:4px 10px;">观战</button>`;
-      } else if (withActions && p.isSpectator) {
-        btn = `<button data-unspectate-name="${p.name}" class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:4px 10px;">转回玩家</button>`;
+  private buildStatus(st: LobbyState): HTMLElement {
+    const box = el('div', { style: 'padding:10px 14px;text-align:center;' });
+    if (st.status === 'playing') {
+      const g = st.games.find(x => x.id === st.currentGame);
+      box.append(el('div', { style: 'color:var(--label2);font-size:13px;' }, [`对局中：${g?.name ?? st.currentGame}`]));
+      if (p_isHost(st, this.myId())) {
+        const btn = el('button', { class: 'btn btn-secondary', style: 'font-size:13px;padding:6px 14px;margin-top:8px;' }, ['中止回大厅']);
+        btn.addEventListener('pointerdown', () => this.emit('ui:back_to_lobby'));
+        box.append(btn);
       }
-      return `<div class="player-row"><span class="dot green"></span>${p.name}${tag}${btn}</div>`;
-    }).join('');
+    } else if (st.notice) {
+      box.append(el('div', { style: 'color:var(--label2);font-size:13px;' }, [st.notice]));
+    } else {
+      box.append(el('div', { style: 'color:var(--label3);font-size:13px;' }, ['等待主机发起游戏…']));
+    }
+    return box;
   }
 
-  private bindLobbyButtons(): void {
-    qso('#btn-start', this.el)?.addEventListener('pointerdown', (e: Event) => {
-      if ((e.target as HTMLButtonElement).disabled) return;
-      this.emit('ui:start_game');
-    });
-    qso('#btn-share', this.el)?.addEventListener('pointerdown', () => {
-      this.emit('ui:share_room');
-    });
-    qso('#btn-scan-guest', this.el)?.addEventListener('click', () => {
-      this.emit('ui:open_scanner', (data: unknown) => {
-        this.emit('ui:scan_guest', JSON.stringify(data));
-      });
-    });
-    qso('#btn-log', this.el)?.addEventListener('pointerdown', () => {
-      this.emit('ui:show_log');
-    });
-    this.el.querySelectorAll<HTMLButtonElement>('[data-spectate-name]').forEach(btn => {
-      btn.addEventListener('pointerdown', () => {
-        this.emit('ui:spectate_player', btn.dataset.spectateName!);
-      });
-    });
-    this.el.querySelectorAll<HTMLButtonElement>('[data-unspectate-name]').forEach(btn => {
-      btn.addEventListener('pointerdown', () => {
-        this.emit('ui:unspectate_player', btn.dataset.unspectateName!);
-      });
-    });
+  // ---------- 主机发起面板 ----------
+
+  private openStartPanel(g: GameMeta, st: LobbyState): void {
+    this.seatDraft = {};
+    for (const p of st.players) {
+      this.seatDraft[p.id] = p.wantPlay ? 'player' : 'spectator';
+    }
+    // 保证游戏位数量恰好 playerCount：多退少补（按声明顺序）
+    const want = st.players;
+    let playersSeated = want.filter(p => this.seatDraft[p.id] === 'player').length;
+    if (playersSeated > g.playerCount) {
+      for (let i = want.length - 1; i >= 0 && playersSeated > g.playerCount; i--) {
+        const pid = want[i].id;
+        if (this.seatDraft[pid] === 'player') {
+          this.seatDraft[pid] = 'spectator';
+          playersSeated--;
+        }
+      }
+    } else {
+      for (const p of want) {
+        if (playersSeated >= g.playerCount) break;
+        if (this.seatDraft[p.id] !== 'player') {
+          this.seatDraft[p.id] = 'player';
+          playersSeated++;
+        }
+      }
+    }
+    this.renderStartPanel(g, st);
   }
+
+  private renderStartPanel(g: GameMeta, st: LobbyState): void {
+    const prev = document.getElementById('start-panel');
+    prev?.remove();
+    const mask = el('div', { id: 'start-panel', style: 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;' });
+    const panel = el('div', {
+      style: 'background:var(--bg1,#fff);border-radius:14px;padding:16px;width:88vw;max-width:360px;max-height:80vh;overflow-y:auto;',
+    });
+    panel.append(el('div', { style: 'font-weight:600;margin-bottom:8px;' }, [`发起「${g.name}」· 选择座位`]));
+    const rows = el('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-bottom:12px;' });
+    for (const p of st.players) {
+      const row = el('div', { style: 'display:flex;align-items:center;gap:8px;' });
+      row.append(el('span', { style: 'flex:1;font-size:14px;' }, [`${p.name}${p.isHost ? ' (主机)' : ''}`]));
+      const cur = this.seatDraft[p.id];
+      const seg = el('div', { style: 'display:flex;gap:4px;' });
+      for (const opt of [['player', '游戏位'], ['spectator', '观战位']] as const) {
+        const b = el('button', {
+          class: 'btn',
+          style: `font-size:12px;padding:4px 10px;${cur === opt[0] ? 'background:var(--green,#2fbf71);color:#fff;' : ''}`,
+        }, [opt[1]]);
+        b.addEventListener('pointerdown', () => {
+          this.seatDraft[p.id] = opt[0];
+          this.renderStartPanel(g, st);
+        });
+        seg.append(b);
+      }
+      row.append(seg);
+      rows.append(row);
+    }
+    const err = el('div', { style: 'color:#d33;font-size:12px;margin-bottom:8px;display:none;' });
+    const confirm = el('button', { class: 'btn btn-primary', style: 'width:100%;' }, ['✓ 发起游戏']);
+    confirm.addEventListener('pointerdown', () => {
+      const seats: SeatAssign[] = Object.entries(this.seatDraft).map(([playerId, seat]) => ({ playerId, seat }));
+      const n = seats.filter(s => s.seat === 'player').length;
+      if (n !== g.playerCount) {
+        err.style.display = 'block';
+        err.textContent = `「${g.name}」需要 ${g.playerCount} 个游戏位，当前选了 ${n} 个`;
+        return;
+      }
+      this.emit('ui:start_game', g.id, seats);
+      mask.remove();
+    });
+    const cancel = el('button', { class: 'btn btn-secondary', style: 'width:100%;margin-top:8px;' }, ['取消']);
+    cancel.addEventListener('pointerdown', () => mask.remove());
+    panel.append(rows, err, confirm, cancel);
+    mask.append(panel);
+    document.body.append(mask);
+  }
+
+  private myId(): string {
+    return this.state?.you ?? '';
+  }
+}
+
+/** 我是否是主机 */
+function p_isHost(st: LobbyState, myId: string): boolean {
+  return st.players.some(p => p.id === myId && p.isHost);
 }

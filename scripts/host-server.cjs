@@ -986,6 +986,41 @@ var MIME = {
   ".woff2": "font/woff2",
   ".webmanifest": "application/manifest+json"
 };
+var GAMES = [{
+  id: battleshipTest.id,
+  name: battleshipTest.name,
+  description: "\u53CC\u4EBA\u7B56\u7565\u6D77\u6218",
+  playerCount: 2,
+  ready: true
+}];
+var seq = 0;
+var conns = /* @__PURE__ */ new Map();
+var hostId = "";
+var session = null;
+function log(msg) {
+  console.log(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${msg}`);
+}
+function send(ws, msg) {
+  if (ws.readyState === import_ws.WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+function broadcast(msg) {
+  for (const c of conns.values()) send(c.ws, msg);
+}
+function lobbyState() {
+  return {
+    status: session ? "playing" : "lobby",
+    players: Array.from(conns.values()).map((c) => c.player),
+    games: GAMES,
+    currentGame: session?.gameId ?? null,
+    you: ""
+    // 按连接填充
+  };
+}
+function broadcastLobby(notice) {
+  for (const c of conns.values()) {
+    send(c.ws, { type: "lobby_state", payload: { ...lobbyState(), you: c.player.id, notice } });
+  }
+}
 var s0 = {
   version: 0,
   players: [],
@@ -999,41 +1034,147 @@ var s0 = {
   passCount: 0,
   winner: null
 };
-var engine = null;
-var clients = /* @__PURE__ */ new Map();
-function log(msg) {
-  console.log(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${msg}`);
-}
-function broadcastState() {
-  if (!engine) return;
-  const state = engine.getState();
-  for (const [ws, idx] of clients) {
-    const v = engine.buildPlayerView(idx);
-    const ex = state.extra;
-    if (ex && Array.isArray(ex.boards)) v.extra = filterExtra(ex, idx);
-    send(ws, { type: "state", payload: v });
-  }
-}
-function send(ws, msg) {
-  if (ws.readyState === import_ws.WebSocket.OPEN) ws.send(JSON.stringify(msg));
-}
-function startGame() {
-  const config = battleshipTest.config;
-  if (!config) {
-    log("\u914D\u7F6E\u7F3A\u5931");
+function startSession(gameId, seats) {
+  const meta = GAMES.find((g) => g.id === gameId);
+  if (!meta) {
+    log(`\u672A\u77E5\u6E38\u620F: ${gameId}`);
     return;
   }
-  engine = new GameEngine(s0);
+  const players = seats.filter((s2) => s2.seat === "player");
+  if (players.length !== meta.playerCount) {
+    log(`\u6E38\u620F\u4F4D\u6570\u91CF\u4E0D\u7B26: \u9700\u8981 ${meta.playerCount}\uFF0C\u5B9E\u9645 ${players.length}`);
+    return;
+  }
+  const engine = new GameEngine(s0);
+  const config = battleshipTest.config;
   const errs = engine.loadGame(config);
   if (errs.filter((e) => e.level === "error").length > 0) {
     log(`\u914D\u7F6E\u9519\u8BEF: ${errs.map((e) => e.message).join("; ")}`);
     return;
   }
-  engine.startGame(2);
+  engine.startGame(meta.playerCount);
   const s = engine.getState();
-  engine.loadState({ ...s, extra: initBoards(2), phase: "idle" });
-  log("\u6EE1\u5458 2/2\uFF0C\u5F00\u5C40\uFF08\u5E03\u9635\u9636\u6BB5\uFF09");
-  broadcastState();
+  engine.loadState({ ...s, extra: initBoards(meta.playerCount), phase: "idle" });
+  const seatMap = /* @__PURE__ */ new Map();
+  players.forEach((p, i) => seatMap.set(p.playerId, i));
+  session = {
+    gameId,
+    engine,
+    seats: seatMap,
+    spectators: seats.filter((s2) => s2.seat === "spectator").map((s2) => s2.playerId)
+  };
+  log(`\u6E38\u620F\u4F1A\u8BDD\u5F00\u59CB: ${gameId} \u73A9\u5BB6=[${players.map((p) => p.playerId).join(",")}] \u89C2\u6218=[${session.spectators.join(",")}]`);
+  broadcast({ type: "game_started", payload: { gameId, seats: Object.fromEntries(seatMap), spectators: session.spectators } });
+  broadcastGameState();
+}
+function broadcastGameState() {
+  if (!session) return;
+  const state = session.engine.getState();
+  for (const [playerId, idx] of session.seats) {
+    const c = Array.from(conns.values()).find((c2) => c2.player.id === playerId);
+    if (!c) continue;
+    const v = session.engine.buildPlayerView(idx);
+    const ex = state.extra;
+    if (ex && Array.isArray(ex.boards)) v.extra = filterExtra(ex, idx);
+    send(c.ws, { type: "game_state", payload: v });
+  }
+  const spectate = {
+    phase: state.phase,
+    currentTurn: state.currentTurn,
+    winner: state.winner,
+    log: state.extra?.log ?? []
+  };
+  for (const pid of session.spectators) {
+    const c = Array.from(conns.values()).find((c2) => c2.player.id === pid);
+    if (c) send(c.ws, { type: "spectate", payload: spectate });
+  }
+}
+function endSession(notice) {
+  if (!session) return;
+  log(`\u6E38\u620F\u4F1A\u8BDD\u7ED3\u675F: ${notice}`);
+  session = null;
+  broadcast({ type: "back_to_lobby", payload: { notice } });
+  broadcastLobby(notice);
+}
+function handleMsg(c, msg) {
+  const { ws, player } = c;
+  switch (msg.type) {
+    case "register": {
+      break;
+    }
+    case "rename": {
+      const name = String(msg.name ?? "").trim().slice(0, 12) || player.name;
+      player.name = name;
+      log(`${player.id} \u6539\u540D \u2192 ${name}`);
+      broadcastLobby();
+      break;
+    }
+    case "set_seat": {
+      player.wantPlay = !!msg.wantPlay;
+      log(`${player.id} \u58F0\u660E ${player.wantPlay ? "\u60F3\u73A9" : "\u89C2\u6218"}`);
+      broadcastLobby();
+      break;
+    }
+    case "start_game": {
+      if (player.id !== hostId) {
+        send(ws, { type: "error", payload: { message: "\u53EA\u6709\u4E3B\u673A\u53EF\u4EE5\u53D1\u8D77\u6E38\u620F" } });
+        return;
+      }
+      if (session) {
+        send(ws, { type: "error", payload: { message: "\u5DF2\u6709\u8FDB\u884C\u4E2D\u7684\u6E38\u620F" } });
+        return;
+      }
+      const valid = Array.isArray(msg.seats) ? msg.seats : [];
+      const online = new Set(Array.from(conns.values()).map((x) => x.player.id));
+      if (!valid.every((s) => online.has(s.playerId))) {
+        send(ws, { type: "error", payload: { message: "\u5EA7\u4F4D\u5305\u542B\u4E0D\u5728\u7EBF\u73A9\u5BB6" } });
+        return;
+      }
+      startSession(String(msg.gameId), valid);
+      break;
+    }
+    case "action": {
+      if (!session) return;
+      const idx = session.seats.get(player.id);
+      if (idx === void 0) return;
+      const action = msg.payload;
+      action.playerIndex = idx;
+      log(`action: ${action.type} by ${player.id}(\u4F4D\u7F6E${idx})`);
+      void session.engine.dispatch(action).then((err) => {
+        if (err) log(`dispatch \u62D2\u7EDD: ${err.message}`);
+        if (!session) return;
+        const state = session.engine.getState();
+        broadcastGameState();
+        if (state.phase === "ended") {
+          endSession("\u5BF9\u5C40\u7ED3\u675F");
+        }
+      });
+      break;
+    }
+    case "back_to_lobby": {
+      if (player.id !== hostId) {
+        send(ws, { type: "error", payload: { message: "\u53EA\u6709\u4E3B\u673A\u53EF\u4EE5\u4E2D\u6B62\u6E38\u620F" } });
+        return;
+      }
+      endSession("\u4E3B\u673A\u4E2D\u6B62");
+      break;
+    }
+  }
+}
+function removePlayer(c, reason) {
+  conns.delete(c.ws);
+  log(`${c.player.id} \u65AD\u5F00 (${reason})\uFF0C\u5269\u4F59 ${conns.size}`);
+  if (c.player.id === hostId && conns.size > 0) {
+    hostId = Array.from(conns.values())[0].player.id;
+    log(`\u4E3B\u673A\u8F6C\u79FB \u2192 ${hostId}`);
+  }
+  if (session) {
+    const inGame = session.seats.has(c.player.id) || session.spectators.includes(c.player.id);
+    if (inGame && session.seats.has(c.player.id)) {
+      endSession(`\u73A9\u5BB6 ${c.player.id} \u6389\u7EBF`);
+    }
+  }
+  broadcastLobby();
 }
 var server = (0, import_http.createServer)(async (req, res) => {
   try {
@@ -1057,12 +1198,17 @@ var server = (0, import_http.createServer)(async (req, res) => {
 });
 var wss = new import_ws.WebSocketServer({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    wss.emit("connection", ws, req);
-  });
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
 });
 wss.on("connection", (ws) => {
-  log("\u5BA2\u6237\u7AEF\u63A5\u5165");
+  const id = `player-${seq++}`;
+  const player = { id, name: `\u73A9\u5BB6${seq}`, isHost: conns.size === 0, wantPlay: false };
+  const c = { ws, player };
+  conns.set(ws, c);
+  if (conns.size === 1) hostId = id;
+  log(`${id} \u52A0\u5165\u5927\u5385 (${conns.size} \u4EBA\u5728\u7EBF, \u4E3B\u673A=${hostId})`);
+  send(ws, { type: "lobby_state", payload: { ...lobbyState(), you: id } });
+  broadcastLobby();
   ws.on("message", (raw) => {
     let msg;
     try {
@@ -1070,41 +1216,11 @@ wss.on("connection", (ws) => {
     } catch {
       return;
     }
-    if (msg.type === "register") {
-      if (clients.size >= 2) {
-        log("\u62D2\u7EDD: \u623F\u95F4\u5DF2\u6EE1");
-        ws.close();
-        return;
-      }
-      const idx = clients.size;
-      clients.set(ws, idx);
-      log(`player-${idx} \u52A0\u5165 (${clients.size}/2)`);
-      send(ws, { type: "assign", payload: { playerIndex: idx } });
-      if (clients.size === 2) startGame();
-      return;
-    }
-    if (msg.type === "action") {
-      const idx = clients.get(ws);
-      if (idx === void 0 || !engine) return;
-      const action = msg.payload;
-      action.playerIndex = action.playerIndex ?? idx;
-      log(`action: ${action.type} by ${action.playerIndex}`);
-      void engine.dispatch(action).then((err) => {
-        if (err) log(`dispatch \u62D2\u7EDD: ${err.message}`);
-        broadcastState();
-      });
-    }
+    handleMsg(c, msg);
   });
-  ws.on("close", () => {
-    const idx = clients.get(ws);
-    if (idx !== void 0) {
-      clients.delete(ws);
-      log(`player-${idx} \u65AD\u5F00 (${clients.size}/2)`);
-    }
-  });
-  ws.on("error", () => {
-  });
+  ws.on("close", () => removePlayer(c, "close"));
+  ws.on("error", () => removePlayer(c, "error"));
 });
 server.listen(PORT, "0.0.0.0", () => {
-  log(`\u4E00\u4F53\u670D\u52A1\u5668 listening 0.0.0.0:${PORT} (\u9875\u9762 http://<ip>:${PORT}/ + ws)`);
+  log(`\u5927\u5385\u670D\u52A1\u5668 listening 0.0.0.0:${PORT} (\u9875\u9762 http://<ip>:${PORT}/ + ws \u5927\u5385)`);
 });

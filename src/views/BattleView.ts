@@ -44,6 +44,8 @@ export class BattleView extends BaseView {
   private previewCells: HTMLElement[] = [];
   private scroll!: HTMLElement;
   private statusEl!: HTMLElement;
+  /** 大厅主机：显示"中止回大厅" */
+  amHost = false;
 
   constructor(parent: HTMLElement) {
     super(parent);
@@ -128,6 +130,13 @@ export class BattleView extends BaseView {
     }
 
     const sec = el('div', {});
+    if (this.amHost) {
+      const btnRow = el('div', { style: 'display:flex;gap:8px;margin-bottom:10px;' });
+      const btn = el('button', { class: 'btn btn-secondary', style: 'font-size:13px;padding:4px 12px;' }, ['中止回大厅']);
+      btn.addEventListener('pointerdown', () => this.emit('ui:back_to_lobby'));
+      btnRow.append(btn);
+      sec.appendChild(btnRow);
+    }
     sec.appendChild(this.buildSection('我的海域', this.buildMyBattleGrid(my, enemy)));
     sec.appendChild(this.buildSection('敌方海域（点击开火）', this.buildEnemyBattleGrid(my)));
     sec.appendChild(this.buildLegend());
