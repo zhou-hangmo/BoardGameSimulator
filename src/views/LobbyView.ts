@@ -5,6 +5,7 @@
 // ============================================================
 import { BaseView } from './BaseView';
 import { el } from '../utils/dom';
+import QRCode from 'qrcode';
 import type { LobbyState, LobbyPlayer, GameMeta, SeatAssign } from '../core/lobbyTypes';
 
 export class LobbyView extends BaseView {
@@ -37,7 +38,32 @@ export class LobbyView extends BaseView {
     bar.append(
       el('span', { class: 'nav-title' }, [`游戏大厅 · ${st.players.length} 人在线`]),
     );
+    const invite = el('button', { class: 'btn btn-secondary', style: 'font-size:12px;padding:4px 10px;' }, ['📤 邀请']);
+    invite.addEventListener('pointerdown', () => this.openInvitePanel());
+    bar.append(invite);
     return bar;
+  }
+
+  /** 邀请面板：本机接入 URL + 二维码 */
+  private openInvitePanel(): void {
+    const url = `${location.origin}${location.pathname}?ws=1`;
+    const mask = el('div', { style: 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;' });
+    const panel = el('div', {
+      style: 'background:var(--bg1,#fff);border-radius:14px;padding:16px;width:88vw;max-width:340px;text-align:center;',
+    });
+    panel.append(el('div', { style: 'font-weight:600;margin-bottom:8px;' }, ['邀请玩家加入']));
+    const img = el('img', { style: 'width:220px;height:220px;margin:8px auto;display:block;border:4px solid #fff;border-radius:8px;' });
+    img.alt = '邀请二维码';
+    panel.append(img);
+    const ta = el('textarea', { readOnly: 'true', style: 'width:100%;height:48px;background:#f4f4f4;border:1px solid #ddd;border-radius:8px;font:12px monospace;box-sizing:border-box;padding:6px;' });
+    ta.value = url;
+    panel.append(ta);
+    const close = el('button', { class: 'btn btn-secondary', style: 'width:100%;margin-top:8px;' }, ['关闭']);
+    close.addEventListener('pointerdown', () => mask.remove());
+    panel.append(close);
+    mask.append(panel);
+    document.body.append(mask);
+    void QRCode.toDataURL(url, { width: 440, margin: 1 }).then(u => { img.src = u; }).catch(() => { /* 二维码生成失败 */ });
   }
 
   private buildPlayers(st: LobbyState): HTMLElement {

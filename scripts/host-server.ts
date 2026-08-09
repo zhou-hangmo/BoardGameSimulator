@@ -49,7 +49,7 @@ interface Conn {
 
 let seq = 0;
 const conns = new Map<WebSocket, Conn>();       // 所有在线连接
-const hostWs = new Set<WebSocket>();            // 记录第一个连接为主机（可转移）
+const playersCache = new Map<string, { name: string; wantPlay: boolean }>();  // 离线身份缓存（断线恢复）
 let hostId = '';
 
 // 游戏会话（null = 大厅）
@@ -170,7 +170,16 @@ function handleMsg(c: Conn, msg: ClientMsg): void {
 
   switch (msg.type) {
     case 'register': {
-      // register 在连接建立时处理（见 connection），此处防重复
+      // 断线恢复：携带 playerId 且缓存存在 → 复用身份
+      const savedId = String((msg as { playerId?: string }).playerId ?? '');
+      const cached = playersCache.get(savedId);
+      if (cached && savedId && !Array.from(conns.values()).some(c => c.player.id === savedId)) {
+        player.id = savedId;
+        player.name = cached.name;
+        player.wantPlay = cached.wantPlay;
+        log(`${player.id} 身份恢复 (${cached.name})`);
+        broadcastLobby();
+      }
       break;
     }
     case 'rename': {
@@ -227,6 +236,8 @@ function handleMsg(c: Conn, msg: ClientMsg): void {
 
 function removePlayer(c: Conn, reason: string): void {
   conns.delete(c.ws);
+  // 缓存身份供断线恢复（仅大厅玩家，不缓存游戏内状态）
+  playersCache.set(c.player.id, { name: c.player.name, wantPlay: c.player.wantPlay });
   log(`${c.player.id} 断开 (${reason})，剩余 ${conns.size}`);
   if (c.player.id === hostId && conns.size > 0) {
     // 主机转移给最早连接者

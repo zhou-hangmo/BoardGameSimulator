@@ -73,6 +73,7 @@ function handleMsg(msg: { type: string; payload?: unknown }): void {
     case 'lobby_state': {
       const st = msg.payload as LobbyState;
       myId = st.you;
+      try { localStorage.setItem('bgs-pid', myId); } catch { /* 无 localStorage */ }
       amHost = !!st.players.find(p => p.id === myId)?.isHost;
       lobbyView.showLobby(st);
       lobbyView.mount();
@@ -139,8 +140,10 @@ async function connect(): Promise<void> {
   t.onMessage(handleMsg);
   await t.connect();
   reconnectCount = 0;
-  t.register();
-  Logger.log('APP', `已连接 ${WS_URL}`);
+  // 断线恢复：携带持久化 playerId
+  const saved = localStorage.getItem('bgs-pid') ?? undefined;
+  t.register(saved);
+  Logger.log('APP', `已连接 ${WS_URL}${saved ? `（恢复身份 ${saved}）` : ''}`);
 }
 
 // ========== UI 事件 ==========

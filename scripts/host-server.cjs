@@ -953,6 +953,9 @@ registerFunction('fire', fire);
 var battleshipTest = {
   id: "battleship",
   name: "\u6D77\u6218\u68CB",
+  description: "\u53CC\u4EBA\u7B56\u7565\u6D77\u6218",
+  playerCount: "2",
+  ready: true,
   config: { ...config_default, l3: l3Script }
 };
 
@@ -995,6 +998,7 @@ var GAMES = [{
 }];
 var seq = 0;
 var conns = /* @__PURE__ */ new Map();
+var playersCache = /* @__PURE__ */ new Map();
 var hostId = "";
 var session = null;
 function log(msg) {
@@ -1100,6 +1104,15 @@ function handleMsg(c, msg) {
   const { ws, player } = c;
   switch (msg.type) {
     case "register": {
+      const savedId = String(msg.playerId ?? "");
+      const cached = playersCache.get(savedId);
+      if (cached && savedId && !Array.from(conns.values()).some((c2) => c2.player.id === savedId)) {
+        player.id = savedId;
+        player.name = cached.name;
+        player.wantPlay = cached.wantPlay;
+        log(`${player.id} \u8EAB\u4EFD\u6062\u590D (${cached.name})`);
+        broadcastLobby();
+      }
       break;
     }
     case "rename": {
@@ -1163,6 +1176,7 @@ function handleMsg(c, msg) {
 }
 function removePlayer(c, reason) {
   conns.delete(c.ws);
+  playersCache.set(c.player.id, { name: c.player.name, wantPlay: c.player.wantPlay });
   log(`${c.player.id} \u65AD\u5F00 (${reason})\uFF0C\u5269\u4F59 ${conns.size}`);
   if (c.player.id === hostId && conns.size > 0) {
     hostId = Array.from(conns.values())[0].player.id;

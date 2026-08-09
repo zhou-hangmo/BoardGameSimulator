@@ -45,7 +45,7 @@ export interface GameStarted {
 
 /** 客户端 → 服务器消息 */
 export type ClientMsg =
-  | { type: 'register'; name?: string }
+  | { type: 'register'; name?: string; playerId?: string }
   | { type: 'rename'; name: string }
   | { type: 'set_seat'; wantPlay: boolean }
   | { type: 'start_game'; gameId: string; seats: SeatAssign[] }
