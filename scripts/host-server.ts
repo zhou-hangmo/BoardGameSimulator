@@ -73,35 +73,59 @@ function log(msg: string): void {
 
 // ========== 本机可达地址（邀请用） ==========
 
-/** v6 排序：隐私扩展地址（随机后缀）优先；EUI-64（含 ff:fe）次之；::1 结尾占位地址最后（实测不可达） */
+/** v6 排序：隐私扩展地址（随机后缀）优先；EUI-64（含 ff:fe）次之 */
 function v6Rank(addr: string): number {
   const a = addr.toLowerCase();
-  if (a.endsWith('::1')) return 2;
   if (a.includes('ff:fe')) return 1;
   return 0;
 }
 
-function collectAddresses(): { v6: string[]; v4: string[] } {
-  const v6: string[] = [];
-  const v4: string[] = [];
+/** 占位地址（::1 结尾，实测不可达） */
+function isPlaceholder(addr: string): boolean {
+  return addr.toLowerCase().endsWith('::1');
+}
+
+/**
+ * 按网络接口分类收集地址：
+ *  - wan：蜂窝接口 v6（公网候选，滤占位，隐私优先）
+ *  - lanV4/lanV6：局域网接口（WiFi/有线）地址（同网直连）
+ * 蜂窝 v4（CGN）不收集；未识别接口兜底：v6→wan、v4→lan
+ */
+function collectAddresses(): { wan: string[]; lanV4: string[]; lanV6: string[] } {
+  const wan: string[] = [];
+  const lanV4: string[] = [];
+  const lanV6: string[] = [];
   const nets = os.networkInterfaces();
   for (const name of Object.keys(nets)) {
+    const isCell = /rmnet|ccmni|radio|wwan/i.test(name);
+    const isLan = /wlan|eth|enp|ens/i.test(name);
     for (const ni of nets[name] ?? []) {
       if (ni.internal) continue;
       const fam = String(ni.family).toLowerCase();
+      const addr = ni.address;
       if (fam.includes('6')) {
-        if (!ni.address.toLowerCase().startsWith('fe80')) v6.push(ni.address);
+        if (addr.toLowerCase().startsWith('fe80')) continue;
+        if (isCell) wan.push(addr);
+        else if (isLan) lanV6.push(addr);
+        else wan.push(addr); // 兜底：未识别接口的 v6 视为公网候选
       } else {
-        v4.push(ni.address);
+        if (isCell) continue;  // 蜂窝 v4 = CGN，公网不可达
+        if (isLan) lanV4.push(addr);
+        else lanV4.push(addr); // 兜底
       }
     }
   }
-  v6.sort((a, b) => v6Rank(a) - v6Rank(b));
-  return { v6, v4 };
+  wan.sort((a, b) => v6Rank(a) - v6Rank(b));
+  lanV6.sort((a, b) => v6Rank(a) - v6Rank(b));
+  return {
+    wan: wan.filter(a => !isPlaceholder(a)),
+    lanV4,
+    lanV6: lanV6.filter(a => !isPlaceholder(a)),
+  };
 }
 
 const ADDRS = collectAddresses();
-log(`本机可达地址: v6=[${ADDRS.v6.join(', ')}] v4=[${ADDRS.v4.join(', ')}]`);
+log(`本机可达地址: wan(v6)=[${ADDRS.wan.join(', ')}] lanV4=[${ADDRS.lanV4.join(', ')}] lanV6=[${ADDRS.lanV6.join(', ')}]`);
 
 function send(ws: WebSocket, msg: unknown): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));

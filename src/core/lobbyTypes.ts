@@ -29,7 +29,7 @@ export interface LobbyState {
   currentGame: string | null;   // 进行中的游戏 id（playing 时）
   you: string;                  // 本机 player id
   notice?: string;              // 提示（如"游戏结束"）
-  addresses?: { v6: string[]; v4: string[] };  // 服务器本机可达地址（邀请用）
+  addresses?: { wan: string[]; lanV4: string[]; lanV6: string[] };  // 服务器本机可达地址（邀请用：公网/局域网分组）
 }
 
 /** 主机发起游戏时的座位分配 */

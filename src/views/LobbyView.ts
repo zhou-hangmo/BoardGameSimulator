@@ -281,38 +281,65 @@ export class LobbyView extends BaseView {
     setTimeout(() => input.focus(), 0);
   }
 
-  // ---------- 邀请面板 ----------
+  // ---------- 邀请面板（胶囊切换 局域网/公网） ----------
 
   private openInvitePanel(): void {
     const port = location.port || '80';
     const addrs = this.state?.addresses;
-    const urls: string[] = [];
-    for (const v6 of addrs?.v6 ?? []) {
-      urls.push(`http://[${v6}]:${port}/?ws=1`);
-    }
-    const v4 = addrs?.v4?.[0];
-    if (v4) urls.push(`http://${v4}:${port}/?ws=1`);
-    urls.push(`${location.origin}${location.pathname}?ws=1`); // localhost 兜底
-    const primary = urls[0] ?? urls[urls.length - 1];
+    const wanUrls = (addrs?.wan ?? []).map(v6 => `http://[${v6}]:${port}/?ws=1`);
+    const lanUrls = [
+      ...(addrs?.lanV4 ?? []).map(v4 => `http://${v4}:${port}/?ws=1`),
+      ...(addrs?.lanV6 ?? []).map(v6 => `http://[${v6}]:${port}/?ws=1`),
+    ];
+    let mode: 'lan' | 'wan' = wanUrls.length > 0 ? 'wan' : 'lan';
 
     const mask = el('div', { style: 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;' });
     const panel = el('div', {
       style: 'background:#fff;border-radius:14px;padding:16px;width:88vw;max-width:340px;text-align:center;',
     });
     panel.append(el('div', { style: 'font-weight:600;font-size:15px;margin-bottom:8px;' }, ['邀请玩家加入']));
-    const img = el('img', { style: 'width:220px;height:220px;margin:8px auto;display:block;border:4px solid #fff;border-radius:8px;' });
-    img.alt = '邀请二维码';
-    panel.append(img);
-    panel.append(el('div', { style: 'font-size:12px;color:var(--color-label3);margin-bottom:4px;' }, ['公网玩家用第一个（蜂窝/宽带 v6），连不上换下一个']));
-    const ta = el('textarea', { readOnly: 'true', style: 'width:100%;height:84px;background:#f4f4f4;border:1px solid #ddd;border-radius:8px;font:12px monospace;box-sizing:border-box;padding:6px;' });
-    ta.value = urls.join('\n');
-    panel.append(ta);
+
+    // 胶囊切换
+    const seg = SegmentedControl({
+      options: [
+        { key: 'lan', label: '局域网' },
+        { key: 'wan', label: '公网' },
+      ],
+      value: mode,
+      onChange: (k) => {
+        mode = k as 'lan' | 'wan';
+        render();
+      },
+    });
+    panel.append(seg);
+
+    const body = el('div', { style: 'margin-top:10px;' });
+    panel.append(body);
+
+    const render = (): void => {
+      body.innerHTML = '';
+      const urls = mode === 'wan' ? wanUrls : lanUrls;
+      const hint = mode === 'wan' ? '公网玩家（异地/蜂窝）扫此码' : '同一 WiFi 玩家扫此码';
+      if (urls.length === 0) {
+        body.append(el('div', { style: 'color:var(--color-label3);font-size:13px;padding:16px 0;' }, ['未检测到可用地址']));
+        return;
+      }
+      const img = el('img', { style: 'width:220px;height:220px;margin:8px auto;display:block;border:4px solid #fff;border-radius:8px;' });
+      img.alt = '邀请二维码';
+      body.append(img);
+      body.append(el('div', { style: 'font-size:12px;color:var(--color-label3);margin-bottom:4px;' }, [hint]));
+      const ta = el('textarea', { readOnly: 'true', style: 'width:100%;height:72px;background:#f4f4f4;border:1px solid #ddd;border-radius:8px;font:12px monospace;box-sizing:border-box;padding:6px;' });
+      ta.value = urls.join('\n');
+      body.append(ta);
+      void QRCode.toDataURL(urls[0], { width: 440, margin: 1 }).then(u => { img.src = u; }).catch(() => { /* 二维码生成失败 */ });
+    };
+    render();
+
     const close = el('button', { class: 'btn btn-secondary', style: 'width:100%;margin-top:8px;' }, ['关闭']);
     close.addEventListener('pointerdown', () => mask.remove());
     panel.append(close);
     mask.append(panel);
     document.body.append(mask);
-    void QRCode.toDataURL(primary, { width: 440, margin: 1 }).then(u => { img.src = u; }).catch(() => { /* 二维码生成失败 */ });
   }
 
   private amHost(st: LobbyState | null): boolean {

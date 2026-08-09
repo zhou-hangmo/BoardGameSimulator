@@ -4700,31 +4700,47 @@ function log(msg) {
 }
 function v6Rank(addr) {
   const a = addr.toLowerCase();
-  if (a.endsWith("::1")) return 2;
   if (a.includes("ff:fe")) return 1;
   return 0;
 }
+function isPlaceholder(addr) {
+  return addr.toLowerCase().endsWith("::1");
+}
 function collectAddresses() {
   var _a;
-  const v6 = [];
-  const v4 = [];
+  const wan = [];
+  const lanV4 = [];
+  const lanV6 = [];
   const nets = import_os.default.networkInterfaces();
   for (const name of Object.keys(nets)) {
+    const isCell = /rmnet|ccmni|radio|wwan/i.test(name);
+    const isLan = /wlan|eth|enp|ens/i.test(name);
     for (const ni of (_a = nets[name]) != null ? _a : []) {
       if (ni.internal) continue;
       const fam = String(ni.family).toLowerCase();
+      const addr = ni.address;
       if (fam.includes("6")) {
-        if (!ni.address.toLowerCase().startsWith("fe80")) v6.push(ni.address);
+        if (addr.toLowerCase().startsWith("fe80")) continue;
+        if (isCell) wan.push(addr);
+        else if (isLan) lanV6.push(addr);
+        else wan.push(addr);
       } else {
-        v4.push(ni.address);
+        if (isCell) continue;
+        if (isLan) lanV4.push(addr);
+        else lanV4.push(addr);
       }
     }
   }
-  v6.sort((a, b) => v6Rank(a) - v6Rank(b));
-  return { v6, v4 };
+  wan.sort((a, b) => v6Rank(a) - v6Rank(b));
+  lanV6.sort((a, b) => v6Rank(a) - v6Rank(b));
+  return {
+    wan: wan.filter((a) => !isPlaceholder(a)),
+    lanV4,
+    lanV6: lanV6.filter((a) => !isPlaceholder(a))
+  };
 }
 var ADDRS = collectAddresses();
-log(`\u672C\u673A\u53EF\u8FBE\u5730\u5740: v6=[${ADDRS.v6.join(", ")}] v4=[${ADDRS.v4.join(", ")}]`);
+log(`\u672C\u673A\u53EF\u8FBE\u5730\u5740: wan(v6)=[${ADDRS.wan.join(", ")}] lanV4=[${ADDRS.lanV4.join(", ")}] lanV6=[${ADDRS.lanV6.join(", ")}]`);
 function send(ws, msg) {
   if (ws.readyState === import_websocket.default.OPEN) ws.send(JSON.stringify(msg));
 }
