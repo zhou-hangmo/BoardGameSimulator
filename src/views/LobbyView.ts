@@ -48,9 +48,8 @@ export class LobbyView extends BaseView {
 
   private buildHeader(st: LobbyState): HTMLElement {
     const bar = el('div', { class: 'nav-bar', style: 'position:relative;' });
-    bar.append(
-      el('span', { class: 'nav-title' }, [`游戏大厅 · ${st.players.length} 人在线`]),
-    );
+    const title = `游戏大厅 · ${st.players.length} 人在线${st.hasPassword ? ' · 需口令' : ''}`;
+    bar.append(el('span', { class: 'nav-title' }, [title]));
     const invite = el('button', { class: 'btn btn-secondary', style: 'font-size:12px;padding:4px 10px;position:absolute;right:12px;top:50%;transform:translateY(-50%);' }, ['邀请']);
     invite.addEventListener('pointerdown', () => this.openInvitePanel());
     bar.append(invite);
@@ -71,6 +70,17 @@ export class LobbyView extends BaseView {
       box.append(el('div', { style: 'color:var(--color-label2);font-size:13px;' }, [st.notice]));
     } else {
       box.append(el('div', { style: 'color:var(--color-label3);font-size:13px;' }, ['等待主机发起游戏…']));
+      if (this.amHost(st)) {
+        const pwdBtn = el('button', { class: 'btn btn-secondary', style: 'font-size:12px;padding:4px 12px;margin-top:8px;' }, [st.hasPassword ? '修改口令' : '设置口令']);
+        pwdBtn.addEventListener('pointerdown', () => this.emit('ui:set_password'));
+        box.append(pwdBtn);
+      }
+    }
+    // 保活设置入口（App 主机常驻，随时可重看）
+    if (location.hostname === 'localhost') {
+      const keepBtn = el('button', { class: 'btn btn-secondary', style: 'font-size:12px;padding:4px 12px;margin-top:8px;margin-left:6px;' }, ['保活设置']);
+      keepBtn.addEventListener('pointerdown', () => this.emit('ui:show_keepalive'));
+      box.append(keepBtn);
     }
     return box;
   }

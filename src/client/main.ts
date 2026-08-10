@@ -10,10 +10,12 @@ import '../components/PlayerRow';
 import { WSTransport } from '../core/wsTransport';
 import { bus } from '../utils/EventBus';
 import { Logger } from '../utils/Logger';
+import { el } from '../utils/dom';
 import { ToastManager } from '../views/ToastView';
 import { LobbyView } from '../views/LobbyView';
 import { BattleView } from '../views/BattleView';
 import { SpectatorView, type SpectateData } from '../views/SpectatorView';
+import { KeepAliveView } from '../views/KeepAliveView';
 import { logView } from '../views/LogView';
 import { EVENTS } from '../utils/messages';
 import type { LobbyState, GameStarted, SeatAssign } from '../core/lobbyTypes';
@@ -30,6 +32,7 @@ const app = document.getElementById('app')!;
 const lobbyView = new LobbyView(app);
 const battleView = new BattleView(app);
 const spectatorView = new SpectatorView(app);
+const keepAliveView = new KeepAliveView(app);
 
 let transport: WSTransport | null = null;
 let myId = '';
@@ -38,6 +41,7 @@ let currentGameId = '';
 let mySeat: number | null = null;   // 我在游戏中的位置（null=观战或大厅）
 let inGame = false;
 let reconnectCount = 0;
+let gameSeatMap: Record<string, number> = {};  // playerId -> 游戏位置（conn_state 映射用）
 
 // ========== 视图管理 ==========
 
@@ -82,6 +86,7 @@ function handleMsg(msg: { type: string; payload?: unknown }): void {
     case 'game_started': {
       const gs = msg.payload as GameStarted;
       currentGameId = gs.gameId;
+      gameSeatMap = gs.seats;
       if (gs.seats[myId] !== undefined) {
         mySeat = gs.seats[myId];
         inGame = true;
@@ -112,6 +117,21 @@ function handleMsg(msg: { type: string; payload?: unknown }): void {
       ToastManager.show(pd.notice ?? '玩家掉线，等待重连…');
       break;
     }
+    case 'conn_state': {
+      const cs = msg.payload as { players: { playerId: string; state: string }[] };
+      // 转给当前视图（游戏/观战）——按玩家在游戏中的位置映射
+      if (!inGame) break;
+      const map: Record<number, string> = {};
+      if (currentGameId === 'battleship' && gameSeatMap) {
+        for (const p of cs.players) {
+          const idx = gameSeatMap[p.playerId];
+          if (idx !== undefined) map[idx] = p.state;
+        }
+      }
+      battleView.setConnState(map);
+      spectatorView.setConnState(map);
+      break;
+    }
     case 'kicked': {
       const k = msg.payload as { notice?: string } | undefined;
       transport?.close();
@@ -122,6 +142,14 @@ function handleMsg(msg: { type: string; payload?: unknown }): void {
     case 'error': {
       const e = msg.payload as { message: string };
       ToastManager.show(e.message);
+      if (e.message.includes('口令')) {
+        // 口令错误：提示输入后重连（本地存储口令，重连自动携带）
+        openPasswordDialog((pwd) => {
+          try { localStorage.setItem('bgs-pwd', pwd); } catch { /* ignore */ }
+          reconnectCount = 0;
+          scheduleReconnect();
+        });
+      }
       break;
     }
     case 'closed': {
@@ -152,10 +180,35 @@ async function connect(): Promise<void> {
   t.onMessage(handleMsg);
   await t.connect();
   reconnectCount = 0;
-  // 断线恢复：携带持久化 playerId
+  // 断线恢复：携带持久化 playerId；口令从 URL ?pwd= 或 localStorage
   const saved = localStorage.getItem('bgs-pid') ?? undefined;
-  t.register(saved);
+  const pwd = params.get('pwd') ?? localStorage.getItem('bgs-pwd') ?? undefined;
+  t.register(saved, pwd);
   Logger.log('APP', `已连接 ${WS_URL}${saved ? `（恢复身份 ${saved}）` : ''}`);
+}
+
+/** 口令输入弹层（主机设置口令/玩家输入口令共用） */
+function openPasswordDialog(onSubmit: (pwd: string) => void): void {
+  const prev = document.getElementById('pwd-dialog');
+  prev?.remove();
+  const mask = el('div', { id: 'pwd-dialog', style: 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;' });
+  const panel = el('div', { style: 'background:#fff;border-radius:14px;padding:16px;width:80vw;max-width:320px;' });
+  panel.append(el('div', { style: 'font-weight:600;font-size:15px;margin-bottom:10px;' }, ['房间口令']));
+  const input = el('input', { style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px;letter-spacing:2px;' }) as HTMLInputElement;
+  input.placeholder = '请输入口令';
+  input.maxLength = 8;
+  panel.append(input);
+  const confirm = el('button', { class: 'btn btn-primary', style: 'width:100%;margin-top:10px;' }, ['确定']);
+  confirm.addEventListener('pointerdown', () => {
+    const v = input.value.trim();
+    if (v) { mask.remove(); onSubmit(v); }
+  });
+  const cancel = el('button', { class: 'btn btn-secondary', style: 'width:100%;margin-top:8px;' }, ['取消']);
+  cancel.addEventListener('pointerdown', () => mask.remove());
+  panel.append(confirm, cancel);
+  mask.append(panel);
+  document.body.append(mask);
+  setTimeout(() => input.focus(), 0);
 }
 
 // ========== UI 事件 ==========
@@ -168,6 +221,13 @@ bus.on('ui:rename', (name: string) => transport?.rename(name));
 bus.on('ui:start_game', (gameId: string, seats: SeatAssign[]) => transport?.startGame(gameId, seats));
 // 大厅：主机踢人
 bus.on('ui:kick_player', (playerId: string) => transport?.kickPlayer(String(playerId)));
+// 大厅：主机设置/清除口令
+bus.on('ui:set_password', () => {
+  openPasswordDialog((pwd) => {
+    transport?.setPassword(pwd);
+    try { localStorage.setItem('bgs-pwd', pwd); } catch { /* ignore */ }
+  });
+});
 // 游戏：动作
 bus.on(EVENTS.UI_PLAY_ACTION, (type: string, payload: unknown) => {
   if (!inGame) return;
@@ -177,8 +237,19 @@ bus.on(EVENTS.UI_PLAY_ACTION, (type: string, payload: unknown) => {
 bus.on('ui:back_to_lobby', () => transport?.backToLobby());
 // 日志
 bus.on('ui:show_log', () => logView.show());
+// 保活设置引导（App 主机内展示；浏览器玩家端不显示）
+bus.on('ui:show_keepalive', () => keepAliveView.show());
 
 // ========== 启动 ==========
+
+// App 内（localhost）首次启动展示保活引导
+if (location.hostname === 'localhost') {
+  let shown = false;
+  try { shown = !!localStorage.getItem('bgs-keepalive-shown'); } catch { /* ignore */ }
+  if (!shown) {
+    setTimeout(() => keepAliveView.show(), 3000);
+  }
+}
 
 // 调试钩子
 (window as unknown as Record<string, unknown>).__bgs = {

@@ -44,8 +44,30 @@ export class BattleView extends BaseView {
   private previewCells: HTMLElement[] = [];
   private scroll!: HTMLElement;
   private statusEl!: HTMLElement;
+  private connEl: HTMLElement | null = null;
+  private connState: Record<number, string> = {};  // 游戏位置 -> online/reconnecting
   /** 大厅主机：显示"中止回大厅" */
   amHost = false;
+
+  /** 对局连接状态更新（服务器 conn_state） */
+  setConnState(map: Record<number, string>): void {
+    this.connState = map;
+    this.renderConnState();
+  }
+
+  private renderConnState(): void {
+    if (!this.connEl) return;
+    const me = this.view?.playerIndex ?? 0;
+    const cells: string[] = [];
+    const fmt = (idx: number): string => {
+      const s = this.connState[idx] ?? 'online';
+      if (s === 'reconnecting') return `<span style="color:#e0a33c;">● 重连中</span>`;
+      return `<span style="color:var(--green,#34c759);">● 在线</span>`;
+    };
+    cells.push(`我 ${fmt(me)}`);
+    cells.push(`对方 ${fmt(me ^ 1)}`);
+    this.connEl.innerHTML = cells.join('　·　');
+  }
 
   constructor(parent: HTMLElement) {
     super(parent);
@@ -130,13 +152,17 @@ export class BattleView extends BaseView {
     }
 
     const sec = el('div', {});
+    // 连接状态条（对局中）
+    const connBar = el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:8px;font-size:12px;color:var(--label2);' });
+    this.connEl = el('span', { style: 'flex:1;' });
+    connBar.appendChild(this.connEl);
+    this.renderConnState();
     if (this.amHost) {
-      const btnRow = el('div', { style: 'display:flex;gap:8px;margin-bottom:10px;' });
       const btn = el('button', { class: 'btn btn-secondary', style: 'font-size:13px;padding:4px 12px;' }, ['中止回大厅']);
       btn.addEventListener('pointerdown', () => this.emit('ui:back_to_lobby'));
-      btnRow.append(btn);
-      sec.appendChild(btnRow);
+      connBar.appendChild(btn);
     }
+    sec.appendChild(connBar);
     sec.appendChild(this.buildSection('我的海域', this.buildMyBattleGrid(my, enemy)));
     sec.appendChild(this.buildSection('敌方海域（点击开火）', this.buildEnemyBattleGrid(my)));
     sec.appendChild(this.buildLegend());

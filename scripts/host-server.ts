@@ -55,6 +55,7 @@ const conns = new Map<WebSocket, Conn>();       // 所有在线连接
 const playersCache = new Map<string, { name: string; wantPlay: boolean }>();  // 离线身份缓存（断线恢复）
 const kickedSet = new Set<string>();            // 被踢玩家（断开后不再缓存身份）
 let hostId = '';
+let roomPassword = '';                          // 房间口令（主机设置，空 = 无口令）
 
 // 游戏会话（null = 大厅）
 interface Session {
@@ -143,6 +144,7 @@ function lobbyState(): LobbyState {
     currentGame: session?.gameId ?? null,
     you: '', // 按连接填充
     addresses: ADDRS,
+    hasPassword: !!roomPassword,
   };
 }
 
@@ -193,6 +195,7 @@ function startSession(gameId: string, seats: SeatAssign[]): void {
 
   broadcast({ type: 'game_started', payload: { gameId, seats: Object.fromEntries(seatMap), spectators: session.spectators } as GameStarted });
   broadcastGameState();
+  broadcastConnState();
 }
 
 function broadcastGameState(): void {
@@ -235,6 +238,7 @@ function startReconnectWindow(playerId: string): void {
   session.pendingReconnect = playerId;
   log(`玩家 ${playerId} 掉线，进入 30s 重连窗口...`);
   broadcast({ type: 'peer_disconnected', payload: { playerId, notice: '玩家掉线，等待重连…' } });
+  broadcastConnState();
   session.pendingTimer = setTimeout(() => {
     if (session && session.pendingReconnect) {
       log(`玩家 ${playerId} 重连超时，中止对局`);
@@ -250,6 +254,13 @@ function handleMsg(c: Conn, msg: ClientMsg): void {
 
   switch (msg.type) {
     case 'register': {
+      // 房间口令校验（主机本身不需要）
+      if (player.id !== hostId && roomPassword && (msg as { password?: string }).password !== roomPassword) {
+        send(ws, { type: 'error', payload: { message: '房间口令错误' } });
+        log(`${player.id} 口令错误，拒绝接入`);
+        ws.close();
+        return;
+      }
       // 断线恢复/抢占：携带 playerId 且（缓存存在 或 同 id 在线）→ 恢复身份
       const savedId = String((msg as { playerId?: string }).playerId ?? '');
       const cached = playersCache.get(savedId);
@@ -271,6 +282,7 @@ function handleMsg(c: Conn, msg: ClientMsg): void {
           session.pendingReconnect = null;
           log(`${savedId} 重连成功，对局继续`);
           broadcastGameState();
+          broadcastConnState();
         }
         log(`${player.id} 身份恢复${cached ? ` (${cached.name})` : '（在线抢占）'}`);
         broadcastLobby();
@@ -304,6 +316,14 @@ function handleMsg(c: Conn, msg: ClientMsg): void {
     case 'set_seat': {
       player.wantPlay = !!msg.wantPlay;
       log(`${player.id} 声明 ${player.wantPlay ? '想玩' : '观战'}`);
+      broadcastLobby();
+      break;
+    }
+    case 'set_password': {
+      if (player.id !== hostId) { send(ws, { type: 'error', payload: { message: '只有主机可以设置口令' } }); return; }
+      const pwd = String((msg as { password?: string }).password ?? '').trim().slice(0, 8);
+      roomPassword = pwd;
+      log(`房间口令 ${pwd ? '已设置' : '已清除'}`);
       broadcastLobby();
       break;
     }
@@ -410,6 +430,8 @@ wss.on('connection', (ws) => {
   const c: Conn = { ws, player };
   conns.set(ws, c);
   if (conns.size === 1) hostId = id;
+  (ws as WebSocket & { isAlive?: boolean }).isAlive = true;
+  ws.on('pong', () => { (ws as WebSocket & { isAlive?: boolean }).isAlive = true; });
   log(`${id} 加入大厅 (${conns.size} 人在线, 主机=${hostId})`);
   send(ws, { type: 'lobby_state', payload: { ...lobbyState(), you: id } });
   broadcastLobby();
@@ -424,13 +446,33 @@ wss.on('connection', (ws) => {
   ws.on('error', () => removePlayer(c, 'error'));
 });
 
+// ========== 心跳超时检测 + 连接状态广播 ==========
+
+function broadcastConnState(): void {
+  if (!session) return;
+  const players: { playerId: string; state: 'online' | 'reconnecting' }[] = [];
+  for (const playerId of session.seats.keys()) {
+    const online = Array.from(conns.values()).some(c => c.player.id === playerId);
+    players.push({ playerId, state: online ? 'online' : 'reconnecting' });
+  }
+  broadcast({ type: 'conn_state', payload: { players } });
+}
+
 server.listen(PORT, '::', () => {
   log(`大厅服务器 listening [::]:${PORT} (v4+v6 双栈, 页面 http://<ip>:${PORT}/ + ws 大厅)`);
 
   // 心跳：每 30s ping 所有连接（协议层，浏览器自动回 pong）——防 NAT/光猫空闲超时断线
   setInterval(() => {
     for (const c of conns.values()) {
-      try { c.ws.ping(); } catch { /* 连接异常，close 事件会处理 */ }
+      const ws = c.ws as WebSocket & { isAlive?: boolean };
+      if (ws.isAlive === false) {
+        // 上一轮 ping 未收到 pong → 判死
+        log(`${c.player.id} 心跳超时，判定掉线`);
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      try { ws.ping(); } catch { /* 连接异常，close 事件会处理 */ }
     }
   }, 30000);
 

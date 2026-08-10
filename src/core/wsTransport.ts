@@ -40,9 +40,10 @@ export class WSTransport {
     });
   }
 
-  register(name?: string): void { this.post({ type: 'register', name }); }
+  register(name?: string, password?: string): void { this.post({ type: 'register', name, password }); }
   rename(name: string): void { this.post({ type: 'rename', name }); }
   setSeat(wantPlay: boolean): void { this.post({ type: 'set_seat', wantPlay }); }
+  setPassword(password: string): void { this.post({ type: 'set_password', password }); }
   startGame(gameId: string, seats: SeatAssign[]): void { this.post({ type: 'start_game', gameId, seats }); }
   sendAction(action: GameAction): void { this.post({ type: 'action', payload: action }); }
   backToLobby(): void { this.post({ type: 'back_to_lobby' }); }

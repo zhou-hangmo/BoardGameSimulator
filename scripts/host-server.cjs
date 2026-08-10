@@ -4694,6 +4694,7 @@ var conns = /* @__PURE__ */ new Map();
 var playersCache = /* @__PURE__ */ new Map();
 var kickedSet = /* @__PURE__ */ new Set();
 var hostId = "";
+var roomPassword = "";
 var session = null;
 function log(msg) {
   console.log(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${msg}`);
@@ -4756,7 +4757,8 @@ function lobbyState() {
     currentGame: (_a = session == null ? void 0 : session.gameId) != null ? _a : null,
     you: "",
     // 按连接填充
-    addresses: ADDRS
+    addresses: ADDRS,
+    hasPassword: !!roomPassword
   };
 }
 function broadcastLobby(notice) {
@@ -4811,6 +4813,7 @@ function startSession(gameId, seats) {
   log(`\u6E38\u620F\u4F1A\u8BDD\u5F00\u59CB: ${gameId} \u73A9\u5BB6=[${players.map((p) => p.playerId).join(",")}] \u89C2\u6218=[${session.spectators.join(",")}]`);
   broadcast({ type: "game_started", payload: { gameId, seats: Object.fromEntries(seatMap), spectators: session.spectators } });
   broadcastGameState();
+  broadcastConnState();
 }
 function broadcastGameState() {
   var _a, _b;
@@ -4851,6 +4854,7 @@ function startReconnectWindow(playerId) {
   session.pendingReconnect = playerId;
   log(`\u73A9\u5BB6 ${playerId} \u6389\u7EBF\uFF0C\u8FDB\u5165 30s \u91CD\u8FDE\u7A97\u53E3...`);
   broadcast({ type: "peer_disconnected", payload: { playerId, notice: "\u73A9\u5BB6\u6389\u7EBF\uFF0C\u7B49\u5F85\u91CD\u8FDE\u2026" } });
+  broadcastConnState();
   session.pendingTimer = setTimeout(() => {
     if (session && session.pendingReconnect) {
       log(`\u73A9\u5BB6 ${playerId} \u91CD\u8FDE\u8D85\u65F6\uFF0C\u4E2D\u6B62\u5BF9\u5C40`);
@@ -4859,10 +4863,16 @@ function startReconnectWindow(playerId) {
   }, 3e4);
 }
 function handleMsg(c, msg) {
-  var _a, _b, _c;
+  var _a, _b, _c, _d;
   const { ws, player } = c;
   switch (msg.type) {
     case "register": {
+      if (player.id !== hostId && roomPassword && msg.password !== roomPassword) {
+        send(ws, { type: "error", payload: { message: "\u623F\u95F4\u53E3\u4EE4\u9519\u8BEF" } });
+        log(`${player.id} \u53E3\u4EE4\u9519\u8BEF\uFF0C\u62D2\u7EDD\u63A5\u5165`);
+        ws.close();
+        return;
+      }
       const savedId = String((_a = msg.playerId) != null ? _a : "");
       const cached = playersCache.get(savedId);
       const onlineSame = Array.from(conns.values()).some((c2) => c2.player.id === savedId);
@@ -4885,6 +4895,7 @@ function handleMsg(c, msg) {
           session.pendingReconnect = null;
           log(`${savedId} \u91CD\u8FDE\u6210\u529F\uFF0C\u5BF9\u5C40\u7EE7\u7EED`);
           broadcastGameState();
+          broadcastConnState();
         }
         log(`${player.id} \u8EAB\u4EFD\u6062\u590D${cached ? ` (${cached.name})` : "\uFF08\u5728\u7EBF\u62A2\u5360\uFF09"}`);
         broadcastLobby();
@@ -4926,6 +4937,17 @@ function handleMsg(c, msg) {
     case "set_seat": {
       player.wantPlay = !!msg.wantPlay;
       log(`${player.id} \u58F0\u660E ${player.wantPlay ? "\u60F3\u73A9" : "\u89C2\u6218"}`);
+      broadcastLobby();
+      break;
+    }
+    case "set_password": {
+      if (player.id !== hostId) {
+        send(ws, { type: "error", payload: { message: "\u53EA\u6709\u4E3B\u673A\u53EF\u4EE5\u8BBE\u7F6E\u53E3\u4EE4" } });
+        return;
+      }
+      const pwd = String((_d = msg.password) != null ? _d : "").trim().slice(0, 8);
+      roomPassword = pwd;
+      log(`\u623F\u95F4\u53E3\u4EE4 ${pwd ? "\u5DF2\u8BBE\u7F6E" : "\u5DF2\u6E05\u9664"}`);
       broadcastLobby();
       break;
     }
@@ -5032,6 +5054,10 @@ wss.on("connection", (ws) => {
   const c = { ws, player };
   conns.set(ws, c);
   if (conns.size === 1) hostId = id;
+  ws.isAlive = true;
+  ws.on("pong", () => {
+    ws.isAlive = true;
+  });
   log(`${id} \u52A0\u5165\u5927\u5385 (${conns.size} \u4EBA\u5728\u7EBF, \u4E3B\u673A=${hostId})`);
   send(ws, { type: "lobby_state", payload: { ...lobbyState(), you: id } });
   broadcastLobby();
@@ -5047,12 +5073,28 @@ wss.on("connection", (ws) => {
   ws.on("close", () => removePlayer(c, "close"));
   ws.on("error", () => removePlayer(c, "error"));
 });
+function broadcastConnState() {
+  if (!session) return;
+  const players = [];
+  for (const playerId of session.seats.keys()) {
+    const online = Array.from(conns.values()).some((c) => c.player.id === playerId);
+    players.push({ playerId, state: online ? "online" : "reconnecting" });
+  }
+  broadcast({ type: "conn_state", payload: { players } });
+}
 server.listen(PORT, "::", () => {
   log(`\u5927\u5385\u670D\u52A1\u5668 listening [::]:${PORT} (v4+v6 \u53CC\u6808, \u9875\u9762 http://<ip>:${PORT}/ + ws \u5927\u5385)`);
   setInterval(() => {
     for (const c of conns.values()) {
+      const ws = c.ws;
+      if (ws.isAlive === false) {
+        log(`${c.player.id} \u5FC3\u8DF3\u8D85\u65F6\uFF0C\u5224\u5B9A\u6389\u7EBF`);
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
       try {
-        c.ws.ping();
+        ws.ping();
       } catch {
       }
     }
