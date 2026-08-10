@@ -11,3 +11,6 @@ _archive/
 ws-host.log
 dev.log
 dev.err.log
+
+*.tmp.cjs
+*.log
