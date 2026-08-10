@@ -12,6 +12,7 @@ import { bus } from '../utils/EventBus';
 import { Logger } from '../utils/Logger';
 import { el } from '../utils/dom';
 import { ToastManager } from '../views/ToastView';
+import { encryptText, decryptText } from '../core/crypto';
 import { LobbyView } from '../views/LobbyView';
 import { BattleView } from '../views/BattleView';
 import { SpectatorView, type SpectateData } from '../views/SpectatorView';
@@ -42,6 +43,8 @@ let mySeat: number | null = null;   // 我在游戏中的位置（null=观战或
 let inGame = false;
 let reconnectCount = 0;
 let gameSeatMap: Record<string, number> = {};  // playerId -> 游戏位置（conn_state 映射用）
+let voluntarilyLeft = false;   // 主动离开：不自动重连
+let encKey = params.get('key') ?? '';   // 对局加密密钥（URL 或 lobby_state 下发）
 
 // ========== 视图管理 ==========
 
@@ -72,11 +75,23 @@ function showSpectate(data: SpectateData): void {
 
 // ========== 消息处理 ==========
 
+/** 解密对局消息（enc 包装 → 原文 JSON） */
+async function decryptPayload(payload: unknown): Promise<unknown | null> {
+  const p = payload as { enc?: string } | undefined;
+  if (p && typeof p.enc === 'string' && encKey) {
+    const plain = await decryptText(encKey, p.enc).catch(() => null);
+    if (plain) { try { return JSON.parse(plain); } catch { return null; } }
+    return null;
+  }
+  return payload; // 明文（无加密）
+}
+
 function handleMsg(msg: { type: string; payload?: unknown }): void {
   switch (msg.type) {
     case 'lobby_state': {
       const st = msg.payload as LobbyState;
       myId = st.you;
+      if (st.key) encKey = encKey || st.key;
       try { localStorage.setItem('bgs-pid', myId); } catch { /* 无 localStorage */ }
       amHost = !!st.players.find(p => p.id === myId)?.isHost;
       lobbyView.showLobby(st);
@@ -98,12 +113,17 @@ function handleMsg(msg: { type: string; payload?: unknown }): void {
       break;
     }
     case 'game_state': {
-      const v = msg.payload as PlayerView;
-      showGame(v);
+      void decryptPayload(msg.payload).then(plain => {
+        if (plain === null) { ToastManager.show('对局数据解密失败'); return; }
+        showGame(plain as PlayerView);
+      });
       break;
     }
     case 'spectate': {
-      showSpectate(msg.payload as SpectateData);
+      void decryptPayload(msg.payload).then(plain => {
+        if (plain === null) { ToastManager.show('观战数据解密失败'); return; }
+        showSpectate(plain as SpectateData);
+      });
       break;
     }
     case 'back_to_lobby': {
@@ -157,6 +177,7 @@ function handleMsg(msg: { type: string; payload?: unknown }): void {
       break;
     }
     case 'closed': {
+      if (voluntarilyLeft) return;
       ToastManager.show('连接断开，正在重连…');
       scheduleReconnect();
       break;
@@ -232,10 +253,26 @@ bus.on('ui:set_password', () => {
     try { localStorage.setItem('bgs-pwd', pwd); } catch { /* ignore */ }
   });
 });
-// 游戏：动作
+// 大厅：离开（非主机）——清身份缓存释放位子，不自动重连
+bus.on('ui:leave_lobby', () => {
+  voluntarilyLeft = true;
+  transport?.leave();
+  try { localStorage.removeItem('bgs-pid'); } catch { /* ignore */ }
+  setTimeout(() => {
+    document.body.innerHTML = `<div style="display:flex;height:100%;align-items:center;justify-content:center;font-family:sans-serif;color:#888;">已离开大厅，可重新打开页面加入</div>`;
+  }, 300);
+});
+// 游戏：动作（加密后发送）
 bus.on(EVENTS.UI_PLAY_ACTION, (type: string, payload: unknown) => {
   if (!inGame) return;
-  transport?.sendAction({ type, playerIndex: mySeat ?? 0, payload, timestamp: Date.now() });
+  const action = { type, playerIndex: mySeat ?? 0, payload, timestamp: Date.now() };
+  if (encKey) {
+    void encryptText(encKey, JSON.stringify(action)).then(enc => {
+      transport?.sendAction({ type: '_enc', payload: enc } as never);
+    }).catch(() => { ToastManager.show('加密失败'); });
+  } else {
+    transport?.sendAction(action);
+  }
 });
 // 游戏：主机中止回大厅
 bus.on('ui:back_to_lobby', () => transport?.backToLobby());

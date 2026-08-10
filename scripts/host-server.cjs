@@ -2264,7 +2264,7 @@ var require_websocket = __commonJS({
     var http = require("http");
     var net = require("net");
     var tls = require("tls");
-    var { randomBytes, createHash } = require("crypto");
+    var { randomBytes: randomBytes2, createHash } = require("crypto");
     var { Duplex, Readable } = require("stream");
     var { URL: URL2 } = require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -2802,7 +2802,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes(16).toString("base64");
+      const key = randomBytes2(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -3700,6 +3700,7 @@ var import_http = require("http");
 var import_fs = require("fs");
 var import_os = __toESM(require("os"), 1);
 var import_path = __toESM(require("path"), 1);
+var import_crypto = require("crypto");
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -4695,6 +4696,27 @@ var playersCache = /* @__PURE__ */ new Map();
 var kickedSet = /* @__PURE__ */ new Set();
 var hostId = "";
 var roomPassword = "";
+var sessionKey = (0, import_crypto.randomBytes)(32).toString("hex");
+function encryptText(text) {
+  const iv = (0, import_crypto.randomBytes)(12);
+  const c = (0, import_crypto.createCipheriv)("aes-256-gcm", Buffer.from(sessionKey, "hex"), iv);
+  const enc = Buffer.concat([c.update(text, "utf8"), c.final()]);
+  const tag = c.getAuthTag();
+  return Buffer.concat([iv, enc, tag]).toString("base64");
+}
+function decryptText(b64) {
+  try {
+    const data = Buffer.from(b64, "base64");
+    const iv = data.subarray(0, 12);
+    const ct = data.subarray(12, data.length - 16);
+    const tag = data.subarray(data.length - 16);
+    const d = (0, import_crypto.createDecipheriv)("aes-256-gcm", Buffer.from(sessionKey, "hex"), iv);
+    d.setAuthTag(tag);
+    return Buffer.concat([d.update(ct), d.final()]).toString("utf8");
+  } catch {
+    return null;
+  }
+}
 var session = null;
 function log(msg) {
   console.log(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${msg}`);
@@ -4758,7 +4780,8 @@ function lobbyState() {
     you: "",
     // 按连接填充
     addresses: ADDRS,
-    hasPassword: !!roomPassword
+    hasPassword: !!roomPassword,
+    key: sessionKey
   };
 }
 function broadcastLobby(notice) {
@@ -4825,7 +4848,7 @@ function broadcastGameState() {
     const v = session.engine.buildPlayerView(idx);
     const ex = state.extra;
     if (ex && Array.isArray(ex.boards)) v.extra = filterExtra(ex, idx);
-    send(c.ws, { type: "game_state", payload: v });
+    send(c.ws, { type: "game_state", payload: { enc: encryptText(JSON.stringify(v)) } });
   }
   const spectate = {
     phase: state.phase,
@@ -4835,7 +4858,7 @@ function broadcastGameState() {
   };
   for (const pid of session.spectators) {
     const c = Array.from(conns.values()).find((c2) => c2.player.id === pid);
-    if (c) send(c.ws, { type: "spectate", payload: spectate });
+    if (c) send(c.ws, { type: "spectate", payload: { enc: encryptText(JSON.stringify(spectate)) } });
   }
 }
 function endSession(notice) {
@@ -4863,7 +4886,7 @@ function startReconnectWindow(playerId) {
   }, 3e4);
 }
 function handleMsg(c, msg) {
-  var _a, _b, _c, _d;
+  var _a, _b, _c, _d, _e, _f;
   const { ws, player } = c;
   c.lastSeen = Date.now();
   if (msg.type === "ping") {
@@ -4978,7 +5001,24 @@ function handleMsg(c, msg) {
       if (!session) return;
       const idx = session.seats.get(player.id);
       if (idx === void 0) return;
-      const action = msg.payload;
+      const encStr = typeof ((_e = msg.payload) == null ? void 0 : _e.payload) === "string" ? msg.payload.payload : (_f = msg.payload) == null ? void 0 : _f.enc;
+      let action = null;
+      if (encStr) {
+        const plain = decryptText(encStr);
+        if (plain) {
+          try {
+            action = JSON.parse(plain);
+          } catch {
+            action = null;
+          }
+        }
+      } else if (msg.payload && typeof msg.payload === "object") {
+        action = msg.payload;
+      }
+      if (!action) {
+        send(ws, { type: "error", payload: { message: "\u52A8\u4F5C\u89E3\u5BC6\u5931\u8D25" } });
+        return;
+      }
       action.playerIndex = idx;
       log(`action: ${action.type} by ${player.id}(\u4F4D\u7F6E${idx})`);
       void session.engine.dispatch(action).then((err) => {
@@ -4998,6 +5038,16 @@ function handleMsg(c, msg) {
         return;
       }
       endSession("\u4E3B\u673A\u4E2D\u6B62");
+      break;
+    }
+    case "leave": {
+      playersCache.delete(player.id);
+      kickedSet.add(player.id);
+      log(`${player.id} \u4E3B\u52A8\u79BB\u5F00`);
+      if (session && session.seats.has(player.id)) {
+        endSession(`\u73A9\u5BB6 ${player.id} \u79BB\u5F00`);
+      }
+      ws.close();
       break;
     }
   }

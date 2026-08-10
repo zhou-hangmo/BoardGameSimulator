@@ -42,7 +42,7 @@ export function SegmentedControl({ options, value, onChange, disabled, fill }: P
 
   for (const opt of options) {
     const btn = el('button', {
-      style: `position:relative;z-index:1;border:none;background:transparent;font-size:12px;line-height:1;padding:4px 10px;cursor:${disabled ? 'default' : 'pointer'};color:var(--color-label, #000);white-space:nowrap;`,
+      style: `position:relative;z-index:1;border:none;background:transparent;font-size:12px;line-height:1;padding:4px 10px;cursor:${disabled ? 'default' : 'pointer'};color:var(--color-label, #000);white-space:nowrap;${fill ? 'flex:1;text-align:center;' : ''}`,
     }, [opt.label]);
     btn.setAttribute('data-seat', opt.key);
     if (!disabled) {

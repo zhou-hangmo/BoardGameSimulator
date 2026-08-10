@@ -74,6 +74,11 @@ export class LobbyView extends BaseView {
         const pwdBtn = el('button', { class: 'btn btn-secondary', style: 'font-size:12px;padding:4px 12px;margin-top:8px;' }, [st.hasPassword ? '修改口令' : '设置口令']);
         pwdBtn.addEventListener('pointerdown', () => this.emit('ui:set_password'));
         box.append(pwdBtn);
+      } else {
+        // 非主机：离开大厅（释放游戏位）
+        const leaveBtn = el('button', { class: 'btn btn-secondary', style: 'font-size:12px;padding:4px 12px;margin-top:8px;color:#d33;' }, ['离开大厅']);
+        leaveBtn.addEventListener('pointerdown', () => this.emit('ui:leave_lobby'));
+        box.append(leaveBtn);
       }
     }
     // 保活设置入口（App 主机常驻，随时可重看）
@@ -296,10 +301,11 @@ export class LobbyView extends BaseView {
   private openInvitePanel(): void {
     const port = location.port || '80';
     const addrs = this.state?.addresses;
-    const wanUrls = (addrs?.wan ?? []).map(v6 => `http://[${v6}]:${port}/?ws=1`);
+    const keyPart = this.state?.key ? `&key=${this.state.key}` : '';
+    const wanUrls = (addrs?.wan ?? []).map(v6 => `http://[${v6}]:${port}/?ws=1${keyPart}`);
     const lanUrls = [
-      ...(addrs?.lanV4 ?? []).map(v4 => `http://${v4}:${port}/?ws=1`),
-      ...(addrs?.lanV6 ?? []).map(v6 => `http://[${v6}]:${port}/?ws=1`),
+      ...(addrs?.lanV4 ?? []).map(v4 => `http://${v4}:${port}/?ws=1${keyPart}`),
+      ...(addrs?.lanV6 ?? []).map(v6 => `http://[${v6}]:${port}/?ws=1${keyPart}`),
     ];
     let mode: 'lan' | 'wan' = wanUrls.length > 0 ? 'wan' : 'lan';
 

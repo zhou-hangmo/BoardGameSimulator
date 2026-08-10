@@ -8,6 +8,7 @@ import { createServer } from 'http';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GameEngine } from '../src/core/engine';
 import { battleshipTest } from '../src/games/battleship/test';
@@ -57,6 +58,31 @@ const playersCache = new Map<string, { name: string; wantPlay: boolean }>();  //
 const kickedSet = new Set<string>();            // 被踢玩家（断开后不再缓存身份）
 let hostId = '';
 let roomPassword = '';                          // 房间口令（主机设置，空 = 无口令）
+const sessionKey = randomBytes(32).toString('hex');  // 对局数据加密密钥（与浏览器 WebCrypto AES-256-GCM 互操作）
+
+// ========== 对局数据加密（AES-256-GCM，与 src/core/crypto.ts 同格式） ==========
+
+function encryptText(text: string): string {
+  const iv = randomBytes(12);
+  const c = createCipheriv('aes-256-gcm', Buffer.from(sessionKey, 'hex'), iv);
+  const enc = Buffer.concat([c.update(text, 'utf8'), c.final()]);
+  const tag = c.getAuthTag();
+  return Buffer.concat([iv, enc, tag]).toString('base64');
+}
+
+function decryptText(b64: string): string | null {
+  try {
+    const data = Buffer.from(b64, 'base64');
+    const iv = data.subarray(0, 12);
+    const ct = data.subarray(12, data.length - 16);
+    const tag = data.subarray(data.length - 16);
+    const d = createDecipheriv('aes-256-gcm', Buffer.from(sessionKey, 'hex'), iv);
+    d.setAuthTag(tag);
+    return Buffer.concat([d.update(ct), d.final()]).toString('utf8');
+  } catch {
+    return null;
+  }
+}
 
 // 游戏会话（null = 大厅）
 interface Session {
@@ -146,6 +172,7 @@ function lobbyState(): LobbyState {
     you: '', // 按连接填充
     addresses: ADDRS,
     hasPassword: !!roomPassword,
+    key: sessionKey,
   };
 }
 
@@ -202,16 +229,16 @@ function startSession(gameId: string, seats: SeatAssign[]): void {
 function broadcastGameState(): void {
   if (!session) return;
   const state = session.engine.getState();
-  // 游戏位玩家：按座位过滤的 PlayerView
+  // 游戏位玩家：按座位过滤的 PlayerView（加密传输）
   for (const [playerId, idx] of session.seats) {
     const c = Array.from(conns.values()).find(c => c.player.id === playerId);
     if (!c) continue;
     const v: PlayerView = session.engine.buildPlayerView(idx);
     const ex = state.extra as BattleshipExtra | undefined;
     if (ex && Array.isArray(ex.boards)) v.extra = filterExtra(ex, idx);
-    send(c.ws, { type: 'game_state', payload: v });
+    send(c.ws, { type: 'game_state', payload: { enc: encryptText(JSON.stringify(v)) } });
   }
-  // 观战玩家：spectate 数据
+  // 观战玩家：spectate 数据（加密传输）
   const spectate = {
     phase: state.phase,
     currentTurn: state.currentTurn,
@@ -220,7 +247,7 @@ function broadcastGameState(): void {
   };
   for (const pid of session.spectators) {
     const c = Array.from(conns.values()).find(c => c.player.id === pid);
-    if (c) send(c.ws, { type: 'spectate', payload: spectate });
+    if (c) send(c.ws, { type: 'spectate', payload: { enc: encryptText(JSON.stringify(spectate)) } });
   }
 }
 
@@ -352,7 +379,18 @@ function handleMsg(c: Conn, msg: ClientMsg): void {
       if (!session) return;
       const idx = session.seats.get(player.id);
       if (idx === undefined) return; // 观战者不能操作
-      const action = msg.payload as GameAction;
+      // 解密客户端动作（应用层加密：payload 为 {type:'_enc', payload:enc字符串} 或 {enc}）
+      const encStr = typeof (msg.payload as { payload?: unknown } | undefined)?.payload === 'string'
+        ? (msg.payload as { payload: string }).payload
+        : (msg.payload as { enc?: string } | undefined)?.enc;
+      let action: GameAction | null = null;
+      if (encStr) {
+        const plain = decryptText(encStr);
+        if (plain) { try { action = JSON.parse(plain) as GameAction; } catch { action = null; } }
+      } else if (msg.payload && typeof msg.payload === 'object') {
+        action = msg.payload as GameAction; // 兼容明文（旧客户端）
+      }
+      if (!action) { send(ws, { type: 'error', payload: { message: '动作解密失败' } }); return; }
       action.playerIndex = idx;
       log(`action: ${action.type} by ${player.id}(位置${idx})`);
       void session.engine.dispatch(action).then(err => {
@@ -369,6 +407,18 @@ function handleMsg(c: Conn, msg: ClientMsg): void {
     case 'back_to_lobby': {
       if (player.id !== hostId) { send(ws, { type: 'error', payload: { message: '只有主机可以中止游戏' } }); return; }
       endSession('主机中止');
+      break;
+    }
+    case 'leave': {
+      // 主动离开：清除身份缓存（释放游戏位，重连变新玩家）
+      playersCache.delete(player.id);
+      kickedSet.add(player.id);   // 复用：断开后不缓存身份
+      log(`${player.id} 主动离开`);
+      // 对局中游戏位玩家离开 → 中止对局
+      if (session && session.seats.has(player.id)) {
+        endSession(`玩家 ${player.id} 离开`);
+      }
+      ws.close();
       break;
     }
   }

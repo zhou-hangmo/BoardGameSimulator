@@ -132,6 +132,11 @@ async function main() {
     console.log(`\n══════════ 大厅流程验证结果: ${results.length - failed.length}/${results.length} ══════════`);
     results.forEach(r => console.log(`  [${r.ok ? 'PASS' : 'FAIL'}] ${r.name}`));
     if (pageErrors.length) console.log(`⚠️ 页面错误: ${pageErrors.join(' ; ')}`);
+    // 清理：主机中止对局（避免残留 session 影响后续测试）
+    try {
+      await host.evaluate(() => { const b = window.__bgs; b && b.bus && b.bus.emit('ui:back_to_lobby'); });
+      await new Promise(r => setTimeout(r, 500));
+    } catch { /* ignore */ }
     process.exit(failed.length ? 1 : 0);
   } finally {
     await browser.close();

@@ -31,6 +31,7 @@ export interface LobbyState {
   notice?: string;              // 提示（如"游戏结束"）
   addresses?: { wan: string[]; lanV4: string[]; lanV6: string[] };  // 服务器本机可达地址（邀请用：公网/局域网分组）
   hasPassword?: boolean;        // 房间是否设置了口令
+  key?: string;                 // 对局数据加密密钥（客户端用于加解密 action/state）
 }
 
 /** 主机发起游戏时的座位分配 */
@@ -55,7 +56,8 @@ export type ClientMsg =
   | { type: 'start_game'; gameId: string; seats: SeatAssign[] }
   | { type: 'action'; payload: unknown }
   | { type: 'back_to_lobby' }             // 主机中止游戏
-  | { type: 'kick_player'; playerId: string };  // 主机踢人
+  | { type: 'kick_player'; playerId: string }  // 主机踢人
+  | { type: 'leave' };                     // 主动离开（清除身份缓存，释放位子）
 
 /** 服务器 → 客户端消息 */
 export type ServerMsg =
