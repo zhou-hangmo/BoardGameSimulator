@@ -14,14 +14,16 @@ interface Props {
   value: string;
   onChange: (key: string) => void;
   disabled?: boolean;
+  /** 撑满父容器（默认紧凑 inline） */
+  fill?: boolean;
 }
 
-export function SegmentedControl({ options, value, onChange, disabled }: Props): HTMLElement {
+export function SegmentedControl({ options, value, onChange, disabled, fill }: Props): HTMLElement {
   let idx = Math.max(0, options.findIndex(o => o.key === value));
 
   // 轨道
   const track = el('div', {
-    style: `position:relative;display:flex;background:var(--color-fill3, rgba(118,118,128,.12));border-radius:999px;padding:2px;${disabled ? 'opacity:.55;' : ''}`,
+    style: `position:relative;${fill ? 'width:100%;box-sizing:border-box;display:flex;' : 'display:inline-flex;'}background:var(--color-fill3, rgba(118,118,128,.12));border-radius:999px;padding:2px;${disabled ? 'opacity:.55;' : ''}`,
   });
 
   // 白色滑动指示胶囊（宽度 = 选中项宽度，translateX 按位置移动）

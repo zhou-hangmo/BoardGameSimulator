@@ -117,6 +117,10 @@ function handleMsg(msg: { type: string; payload?: unknown }): void {
       ToastManager.show(pd.notice ?? '玩家掉线，等待重连…');
       break;
     }
+    case 'pong': {
+      // 应用层心跳应答，忽略
+      break;
+    }
     case 'conn_state': {
       const cs = msg.payload as { players: { playerId: string; state: string }[] };
       // 转给当前视图（游戏/观战）——按玩家在游戏中的位置映射
@@ -237,19 +241,8 @@ bus.on(EVENTS.UI_PLAY_ACTION, (type: string, payload: unknown) => {
 bus.on('ui:back_to_lobby', () => transport?.backToLobby());
 // 日志
 bus.on('ui:show_log', () => logView.show());
-// 保活设置引导（App 主机内展示；浏览器玩家端不显示）
+// 保活设置引导（App 主机内展示；仅常驻入口触发，不自动弹出）
 bus.on('ui:show_keepalive', () => keepAliveView.show());
-
-// ========== 启动 ==========
-
-// App 内（localhost）首次启动展示保活引导
-if (location.hostname === 'localhost') {
-  let shown = false;
-  try { shown = !!localStorage.getItem('bgs-keepalive-shown'); } catch { /* ignore */ }
-  if (!shown) {
-    setTimeout(() => keepAliveView.show(), 3000);
-  }
-}
 
 // 调试钩子
 (window as unknown as Record<string, unknown>).__bgs = {

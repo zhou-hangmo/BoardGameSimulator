@@ -10,13 +10,14 @@ export class ToastManager {
     t.textContent = msg;
     document.body.appendChild(t);
 
-    animate(t, { opacity: [0, 1], y: [8, 0] }, {
-      type: 'spring', bounce: 0.3, duration: 0.3,
+    // 只动 opacity——避免 transform 覆盖 CSS 的 translateX(-50%) 居中
+    animate(t, { opacity: [0, 1] }, {
+      duration: 0.2,
     });
 
     setTimeout(() => {
-      animate(t, { opacity: 0, y: -4 }, {
-        type: 'spring', bounce: 0, duration: 0.2,
+      animate(t, { opacity: 0 }, {
+        duration: 0.15,
       }).finished.then(() => t.remove());
     }, 2000);
   }

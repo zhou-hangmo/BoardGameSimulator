@@ -48,6 +48,7 @@ const GAMES: GameMeta[] = [{
 interface Conn {
   ws: WebSocket;
   player: LobbyPlayer;
+  lastSeen: number;   // 最近收到客户端消息时间（应用层心跳判死用）
 }
 
 let seq = 0;
@@ -251,6 +252,13 @@ function startReconnectWindow(playerId: string): void {
 
 function handleMsg(c: Conn, msg: ClientMsg): void {
   const { ws, player } = c;
+  c.lastSeen = Date.now();   // 应用层心跳：任何消息都刷新
+
+  // 应用层心跳应答
+  if ((msg as { type?: string }).type === 'ping') {
+    send(ws, { type: 'pong' });
+    return;
+  }
 
   switch (msg.type) {
     case 'register': {
@@ -427,11 +435,9 @@ wss.on('connection', (ws) => {
   const maxCap = GAMES.filter(g => g.ready)[0]?.maxPlayers ?? 2;
   const seated = Array.from(conns.values()).filter(c => c.player.wantPlay).length;
   const player: LobbyPlayer = { id, name: `玩家${seq}`, isHost: conns.size === 0, wantPlay: seated < maxCap };
-  const c: Conn = { ws, player };
+  const c: Conn = { ws, player, lastSeen: Date.now() };
   conns.set(ws, c);
   if (conns.size === 1) hostId = id;
-  (ws as WebSocket & { isAlive?: boolean }).isAlive = true;
-  ws.on('pong', () => { (ws as WebSocket & { isAlive?: boolean }).isAlive = true; });
   log(`${id} 加入大厅 (${conns.size} 人在线, 主机=${hostId})`);
   send(ws, { type: 'lobby_state', payload: { ...lobbyState(), you: id } });
   broadcastLobby();
@@ -461,18 +467,21 @@ function broadcastConnState(): void {
 server.listen(PORT, '::', () => {
   log(`大厅服务器 listening [::]:${PORT} (v4+v6 双栈, 页面 http://<ip>:${PORT}/ + ws 大厅)`);
 
-  // 心跳：每 30s ping 所有连接（协议层，浏览器自动回 pong）——防 NAT/光猫空闲超时断线
+  // 保活：协议层 ping 保持 NAT 映射（不判死——部分 WebView 不回 pong）
   setInterval(() => {
     for (const c of conns.values()) {
-      const ws = c.ws as WebSocket & { isAlive?: boolean };
-      if (ws.isAlive === false) {
-        // 上一轮 ping 未收到 pong → 判死
-        log(`${c.player.id} 心跳超时，判定掉线`);
+      try { c.ws.ping(); } catch { /* 连接异常，close 事件会处理 */ }
+    }
+  }, 30000);
+
+  // 判死：应用层超时——客户端每 20s 发 {type:'ping'} 消息，60s 无消息判定掉线
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ws, c] of conns) {
+      if (now - c.lastSeen > 60000) {
+        log(`${c.player.id} 应用层心跳超时，判定掉线`);
         ws.terminate();
-        continue;
       }
-      ws.isAlive = false;
-      try { ws.ping(); } catch { /* 连接异常，close 事件会处理 */ }
     }
   }, 30000);
 

@@ -316,6 +316,7 @@ export class LobbyView extends BaseView {
         { key: 'wan', label: '公网' },
       ],
       value: mode,
+      fill: true,
       onChange: (k) => {
         mode = k as 'lan' | 'wan';
         (seg as HTMLElement & { setValue?: (k: string) => void }).setValue?.(mode);

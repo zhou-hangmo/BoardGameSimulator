@@ -13,6 +13,7 @@ export class WSTransport {
   private ws: WebSocket | null = null;
   private url: string;
   private onMsgCb: MsgCb | null = null;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(url: string) {
     this.url = url;
@@ -24,10 +25,17 @@ export class WSTransport {
       this.ws = ws;
       ws.onopen = () => {
         Logger.log('WS', `connected ${this.url}`);
+        // 应用层心跳：每 20s 发 ping（服务器更新 lastSeen，防止被判死）
+        this.pingTimer = setInterval(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 20000);
         resolve();
       };
       ws.onerror = () => reject(new Error(`连接失败: ${this.url}`));
       ws.onclose = () => {
+        if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
         if (this.ws === ws) this.ws = null;
         Logger.log('WS', 'closed');
         this.onMsgCb?.({ type: 'closed' });

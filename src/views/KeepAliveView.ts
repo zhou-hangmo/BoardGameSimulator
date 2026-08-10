@@ -21,7 +21,7 @@ export class KeepAliveView extends BaseView {
     return el('div', { style: 'position:fixed;inset:0;z-index:99990;background:var(--color-bg2,#f2f2f7);display:flex;flex-direction:column;' });
   }
 
-  /** 展示引导页（全屏覆盖） */
+  /** 展示引导页（全屏覆盖，挂载到 body，不影响 #app 内容） */
   show(): void {
     if (this.opened) return;
     this.opened = true;
@@ -53,12 +53,13 @@ export class KeepAliveView extends BaseView {
 
     scroll.append(done, skip);
     this.el.append(scroll);
-    this.mount();
+    // 挂载到 body（不动 #app，关闭时只移除自身）
+    document.body.appendChild(this.el);
   }
 
   close(): void {
     this.opened = false;
-    this.destroy();
+    this.el.remove();
   }
 
   private buildSteps(): Step[] {

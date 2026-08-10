@@ -4865,6 +4865,11 @@ function startReconnectWindow(playerId) {
 function handleMsg(c, msg) {
   var _a, _b, _c, _d;
   const { ws, player } = c;
+  c.lastSeen = Date.now();
+  if (msg.type === "ping") {
+    send(ws, { type: "pong" });
+    return;
+  }
   switch (msg.type) {
     case "register": {
       if (player.id !== hostId && roomPassword && msg.password !== roomPassword) {
@@ -5051,13 +5056,9 @@ wss.on("connection", (ws) => {
   const maxCap = (_b = (_a = GAMES.filter((g) => g.ready)[0]) == null ? void 0 : _a.maxPlayers) != null ? _b : 2;
   const seated = Array.from(conns.values()).filter((c2) => c2.player.wantPlay).length;
   const player = { id, name: `\u73A9\u5BB6${seq}`, isHost: conns.size === 0, wantPlay: seated < maxCap };
-  const c = { ws, player };
+  const c = { ws, player, lastSeen: Date.now() };
   conns.set(ws, c);
   if (conns.size === 1) hostId = id;
-  ws.isAlive = true;
-  ws.on("pong", () => {
-    ws.isAlive = true;
-  });
   log(`${id} \u52A0\u5165\u5927\u5385 (${conns.size} \u4EBA\u5728\u7EBF, \u4E3B\u673A=${hostId})`);
   send(ws, { type: "lobby_state", payload: { ...lobbyState(), you: id } });
   broadcastLobby();
@@ -5086,16 +5087,18 @@ server.listen(PORT, "::", () => {
   log(`\u5927\u5385\u670D\u52A1\u5668 listening [::]:${PORT} (v4+v6 \u53CC\u6808, \u9875\u9762 http://<ip>:${PORT}/ + ws \u5927\u5385)`);
   setInterval(() => {
     for (const c of conns.values()) {
-      const ws = c.ws;
-      if (ws.isAlive === false) {
-        log(`${c.player.id} \u5FC3\u8DF3\u8D85\u65F6\uFF0C\u5224\u5B9A\u6389\u7EBF`);
-        ws.terminate();
-        continue;
-      }
-      ws.isAlive = false;
       try {
-        ws.ping();
+        c.ws.ping();
       } catch {
+      }
+    }
+  }, 3e4);
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ws, c] of conns) {
+      if (now - c.lastSeen > 6e4) {
+        log(`${c.player.id} \u5E94\u7528\u5C42\u5FC3\u8DF3\u8D85\u65F6\uFF0C\u5224\u5B9A\u6389\u7EBF`);
+        ws.terminate();
       }
     }
   }, 3e4);
