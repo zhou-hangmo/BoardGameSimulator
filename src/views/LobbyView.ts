@@ -96,12 +96,10 @@ export class LobbyView extends BaseView {
     const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:10px;padding:12px 14px;' });
     const me = st.players.find(p => p.id === st.you);
 
-    // 游戏位区（计数：超人变红）
+    // 游戏位区（计数）
     const playerSeated = st.players.filter(p => p.wantPlay);
-    const gameCap = st.games.find(g => g.ready)?.maxPlayers ?? 2;
-    const over = playerSeated.length > gameCap;
     const gameCount = el('span', {
-      style: `font-size:12px;${over ? 'color:#d33;font-weight:600;' : 'color:var(--color-label3);'}`,
+      style: 'font-size:12px;color:var(--color-label3);',
     }, [`${playerSeated.length} 人`]);
     gameCount.setAttribute('data-count', String(playerSeated.length));
     wrap.append(this.seatRegion('游戏位', gameCount, playerSeated, me?.id));
