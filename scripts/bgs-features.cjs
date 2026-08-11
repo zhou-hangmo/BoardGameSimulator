@@ -23,9 +23,15 @@ function connect(playerId) {
     const ws = new WebSocket(URL);
     const inbox = [];
     const waiters = [];
+    // 心跳：模拟浏览器页面 20s ping（防服务器 60s 判死）
+    let pingTimer = null;
     ws.on('open', () => {
       ws.send(JSON.stringify({ type: 'register', playerId }));
+      pingTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+      }, 20000);
     });
+    ws.on('close', () => { if (pingTimer) clearInterval(pingTimer); });
     ws.on('message', (d) => {
       const m = JSON.parse(d.toString());
       for (let i = 0; i < waiters.length; i++) {
