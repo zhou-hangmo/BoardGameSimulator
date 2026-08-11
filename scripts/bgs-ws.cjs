@@ -67,10 +67,13 @@ async function main() {
     await host.goto(`${ORIGIN}/?ws=1`, { waitUntil: 'load', timeout: 30000 });
     await guest.goto(`${ORIGIN}/?ws=1`, { waitUntil: 'load', timeout: 30000 });
     await poll(host, () => document.body.innerText.includes('游戏大厅') && document.body.innerText.includes('2 人在线'), 15000, 'host 大厅 2 人在线');
-    await poll(host, () => document.body.innerText.includes('2/2 人'), 10000, '游戏位自动分配 2/2');
+    await poll(host, () => {
+      const el = document.querySelector('[data-count]');
+      return el && el.getAttribute('data-count') === '2';
+    }, 10000, '游戏位自动分配 2 人');
     await poll(guest, () => document.body.innerText.includes('游戏大厅'), 10000, 'guest 大厅');
     const lobbyTxt = await host.evaluate(() => document.body.innerText.slice(0, 160));
-    record('玩家接入大厅(自动分配)', lobbyTxt.includes('2 人在线') && lobbyTxt.includes('2/2 人') && lobbyTxt.includes('海战棋'), lobbyTxt.replace(/\n/g, '|'));
+    record('玩家接入大厅(自动分配)', lobbyTxt.includes('2 人在线') && lobbyTxt.includes('2 人') && lobbyTxt.includes('海战棋'), lobbyTxt.replace(/\n/g, '|'));
 
     // ---------- 2. 手动切回观战（胶囊可切换） ----------
     await host.evaluate(() => {
@@ -78,13 +81,19 @@ async function main() {
       const btn = document.querySelector(`[data-pid="${pid}"] [data-seat="spectator"]`);
       btn?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     });
-    await poll(host, () => document.body.innerText.includes('1/2 人'), 10000, '游戏位计数变 1/2');
+    await poll(host, () => {
+      const el = document.querySelector('[data-count]');
+      return el && el.getAttribute('data-count') === '1';
+    }, 10000, '游戏位计数变 1 人');
     await host.evaluate(() => {
       const pid = window.__bgs.myId;
       const btn = document.querySelector(`[data-pid="${pid}"] [data-seat="player"]`);
       btn?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     });
-    await poll(host, () => document.body.innerText.includes('2/2 人'), 10000, '切回游戏位 2/2');
+    await poll(host, () => {
+      const el = document.querySelector('[data-count]');
+      return el && el.getAttribute('data-count') === '2';
+    }, 10000, '切回游戏位 2 人');
     record('座位手动切换', true, '胶囊切换 游戏↔观战');
 
     // ---------- 3. 主机发起（座位面板默认按声明） ----------

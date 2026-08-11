@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "name": "德州扑克",
+    "version": "1.0",
+    "maxPlayers": 99
+  },
+  "l1": {
+    "cards": [],
+    "players": {
+      "count": 99,
+      "initialResources": {
+        "chips": 300
+      }
+    },
+    "uiLayout": {
+      "slots": {
+        "table": { "component": "holdem_table" },
+        "actions": { "component": "holdem_actions" }
+      },
+      "presetSlots": ["table", "actions"]
+    },
+    "visibility": {
+      "players[*].hand": { "mode": "hidden", "description": "实体牌，不显示" },
+      "players[*].extra": { "mode": "full", "description": "筹码信息公开" }
+    }
+  },
+  "l2": {
+    "rules": [
+      {
+        "trigger": "on_init",
+        "actions": [{ "type": "holdem_init" }]
+      },
+      {
+        "trigger": "on_bet",
+        "actions": [{ "type": "holdem_bet" }]
+      },
+      {
+        "trigger": "on_call",
+        "actions": [{ "type": "holdem_call" }]
+      },
+      {
+        "trigger": "on_raise",
+        "actions": [{ "type": "holdem_raise" }]
+      },
+      {
+        "trigger": "on_check",
+        "actions": [{ "type": "holdem_check" }]
+      },
+      {
+        "trigger": "on_fold",
+        "actions": [{ "type": "holdem_fold" }]
+      },
+      {
+        "trigger": "on_all_in",
+        "actions": [{ "type": "holdem_all_in" }]
+      },
+      {
+        "trigger": "on_take_money",
+        "actions": [{ "type": "holdem_take_money" }]
+      },
+      {
+        "trigger": "on_borrow",
+        "actions": [{ "type": "holdem_borrow" }]
+      },
+      {
+        "trigger": "on_give_money",
+        "actions": [{ "type": "holdem_give_money" }]
+      },
+      {
+        "trigger": "on_request_undo",
+        "actions": [{ "type": "holdem_request_undo" }]
+      },
+      {
+        "trigger": "on_approve_undo",
+        "actions": [{ "type": "holdem_approve_undo" }]
+      },
+      {
+        "trigger": "on_reject_undo",
+        "actions": [{ "type": "holdem_reject_undo" }]
+      },
+      {
+        "trigger": "on_new_hand",
+        "actions": [{ "type": "holdem_new_hand" }]
+      },
+      {
+        "trigger": "on_end_game",
+        "actions": [{ "type": "holdem_end_game" }]
+      }
+    ]
+  },
+  "l3": null
+}

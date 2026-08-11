@@ -3980,6 +3980,448 @@ function fire(extra, playerIndex, cell) {
   };
 }
 
+// src/games/holdem/rules.ts
+function initHoldemExtra(playerCount, cfg) {
+  const dealerIndex = Math.floor(Math.random() * playerCount);
+  return initExtraWithDealer(playerCount, dealerIndex, cfg);
+}
+function initExtraWithDealer(playerCount, dealerIndex, cfg) {
+  const players = Array.from({ length: playerCount }, (_, i) => ({
+    index: i,
+    name: "",
+    chips: cfg.startingChips,
+    roundBet: 0,
+    totalBet: 0,
+    folded: false,
+    allIned: false,
+    acted: false,
+    borrowUsed: 0
+  }));
+  return {
+    phase: "preflop",
+    dealerIndex,
+    sbAmount: cfg.sb,
+    bbAmount: cfg.bb,
+    players,
+    pot: 0,
+    sidePots: [],
+    currentBet: cfg.bb,
+    currentActor: -1,
+    turnOrder: [],
+    history: [],
+    historyIndex: 0,
+    roundStartIndex: 0,
+    undoRequest: null,
+    roundUndoUsed: false,
+    borrowEnabled: cfg.borrowEnabled,
+    borrowAmount: cfg.borrowAmount,
+    borrowLimit: cfg.borrowLimit,
+    sidePotEnabled: cfg.sidePotEnabled,
+    blindsEnabled: cfg.blindsEnabled,
+    started: false
+  };
+}
+function postBlinds(extra) {
+  if (extra.started) return extra;
+  const p = extra.players.length;
+  if (p < 2) return extra;
+  let players = extra.players;
+  let pot = 0;
+  let currentBet = 0;
+  let currentActor;
+  if (extra.blindsEnabled) {
+    const sbIdx = (extra.dealerIndex + 1) % p;
+    const bbIdx = (extra.dealerIndex + 2) % p;
+    players = players.map((pl, i) => {
+      if (i === sbIdx) {
+        const amount = Math.min(extra.sbAmount, pl.chips);
+        return { ...pl, chips: pl.chips - amount, roundBet: amount, totalBet: amount, acted: true };
+      }
+      if (i === bbIdx) {
+        const amount = Math.min(extra.bbAmount, pl.chips);
+        return { ...pl, chips: pl.chips - amount, roundBet: amount, totalBet: amount, acted: true };
+      }
+      return pl;
+    });
+    pot = players[sbIdx].roundBet + players[bbIdx].roundBet;
+    currentBet = extra.bbAmount;
+    currentActor = (bbIdx + 1) % p;
+  } else {
+    currentActor = (extra.dealerIndex + 1) % p;
+  }
+  const turnOrder = buildTurnOrder(players, currentActor);
+  const e = {
+    ...extra,
+    players,
+    pot,
+    currentBet,
+    currentActor,
+    turnOrder,
+    started: true,
+    history: [JSON.stringify(extra)],
+    historyIndex: 0,
+    roundStartIndex: 0,
+    roundUndoUsed: false,
+    undoRequest: null
+  };
+  const started = pushSnapshot(e);
+  return { ...started, roundStartIndex: started.historyIndex };
+}
+function buildTurnOrder(players, startIdx) {
+  const n = players.length;
+  const order = [];
+  for (let i = 0; i < n; i++) {
+    const idx = (startIdx + i) % n;
+    if (!players[idx].folded && !players[idx].allIned) {
+      order.push(idx);
+    }
+  }
+  return order;
+}
+function pushSnapshot(extra) {
+  const snap = JSON.stringify(extra);
+  const history = [...extra.history, snap];
+  if (history.length > 50) history.shift();
+  return { ...extra, history, historyIndex: history.length - 1 };
+}
+function allActedAndLevel(extra) {
+  const active = extra.players.filter((p) => !p.folded && !p.allIned);
+  if (active.length === 0) return true;
+  return active.every((p) => p.acted) && active.every((p) => p.roundBet >= extra.currentBet);
+}
+function nextActor(extra, fromIdx) {
+  const n = extra.players.length;
+  for (let i = 1; i <= n; i++) {
+    const idx = (fromIdx + i) % n;
+    const p = extra.players[idx];
+    if (!p.folded && !p.allIned) return idx;
+  }
+  return -1;
+}
+function holdemBet(extra, playerIndex, amount) {
+  if (!extra.started) return { ok: false, error: "\u6E38\u620F\u5C1A\u672A\u5F00\u59CB" };
+  if (extra.currentActor !== playerIndex) return { ok: false, error: "\u672A\u8F6E\u5230\u4F60" };
+  if (extra.currentBet !== 0) return { ok: false, error: "\u5DF2\u6709\u4E0B\u6CE8\uFF0C\u8BF7\u4F7F\u7528\u52A0\u6CE8" };
+  if (amount <= 0) return { ok: false, error: "\u4E0B\u6CE8\u91D1\u989D\u5FC5\u987B\u5927\u4E8E 0" };
+  if (amount < extra.bbAmount) return { ok: false, error: `\u4E0B\u6CE8\u4E0D\u80FD\u4F4E\u4E8E\u5927\u76F2 ${extra.bbAmount}` };
+  const player = extra.players[playerIndex];
+  if (amount > player.chips) return { ok: false, error: "\u7B79\u7801\u4E0D\u8DB3" };
+  const players = extra.players.map((p, i) => {
+    if (i !== playerIndex) return p;
+    const newChips = p.chips - amount;
+    const allIned = newChips === 0;
+    return { ...p, chips: newChips, roundBet: p.roundBet + amount, totalBet: p.totalBet + amount, acted: true, allIned };
+  });
+  const next = nextActor(extra, playerIndex);
+  const newExtra = {
+    ...extra,
+    players,
+    pot: extra.pot + amount,
+    currentBet: amount,
+    currentActor: next
+  };
+  if (next < 0 || allActedAndLevel(newExtra)) {
+    return advancePhase(newExtra);
+  }
+  return { ok: true, extra: pushSnapshot(newExtra) };
+}
+function holdemCall(extra, playerIndex) {
+  if (!extra.started) return { ok: false, error: "\u6E38\u620F\u5C1A\u672A\u5F00\u59CB" };
+  if (extra.currentActor !== playerIndex) return { ok: false, error: "\u672A\u8F6E\u5230\u4F60" };
+  const player = extra.players[playerIndex];
+  const diff = extra.currentBet - player.roundBet;
+  const amount = Math.min(diff, player.chips);
+  const players = extra.players.map((p, i) => {
+    if (i !== playerIndex) return p;
+    const newChips = p.chips - amount;
+    const allIned = amount < diff || newChips === 0;
+    return { ...p, chips: newChips, roundBet: p.roundBet + amount, totalBet: p.totalBet + amount, acted: true, allIned };
+  });
+  const next = nextActor(extra, playerIndex);
+  const newExtra = {
+    ...extra,
+    players,
+    pot: extra.pot + amount,
+    currentActor: next
+  };
+  if (next < 0 || allActedAndLevel(newExtra)) {
+    return advancePhase(newExtra);
+  }
+  return { ok: true, extra: pushSnapshot(newExtra) };
+}
+function holdemRaise(extra, playerIndex, amount) {
+  if (!extra.started) return { ok: false, error: "\u6E38\u620F\u5C1A\u672A\u5F00\u59CB" };
+  if (extra.currentActor !== playerIndex) return { ok: false, error: "\u672A\u8F6E\u5230\u4F60" };
+  if (extra.currentBet === 0) return { ok: false, error: "\u5F53\u524D\u65E0\u4EBA\u4E0B\u6CE8\uFF0C\u8BF7\u4F7F\u7528\u4E0B\u6CE8" };
+  const player = extra.players[playerIndex];
+  const diff = amount - player.roundBet;
+  if (diff <= 0) return { ok: false, error: "\u52A0\u6CE8\u91D1\u989D\u5FC5\u987B\u5927\u4E8E\u5F53\u524D\u5DF2\u6295\u5165" };
+  if (amount < extra.currentBet * 2) return { ok: false, error: `\u52A0\u6CE8\u81F3\u5C11\u4E3A\u5F53\u524D\u6CE8\u989D ${extra.currentBet} \u7684 2 \u500D` };
+  if (diff > player.chips) return { ok: false, error: "\u7B79\u7801\u4E0D\u8DB3" };
+  const players = extra.players.map((p, i) => {
+    if (i !== playerIndex) return { ...p, acted: false };
+    const newChips = p.chips - diff;
+    const allIned = newChips === 0;
+    return { ...p, chips: newChips, roundBet: amount, totalBet: p.totalBet + diff, acted: true, allIned };
+  });
+  const next = nextActor(extra, playerIndex);
+  const newExtra = {
+    ...extra,
+    players,
+    pot: extra.pot + diff,
+    currentBet: amount,
+    currentActor: next
+  };
+  if (next < 0 || allActedAndLevel(newExtra)) {
+    return advancePhase(newExtra);
+  }
+  return { ok: true, extra: pushSnapshot(newExtra) };
+}
+function holdemCheck(extra, playerIndex) {
+  if (!extra.started) return { ok: false, error: "\u6E38\u620F\u5C1A\u672A\u5F00\u59CB" };
+  if (extra.currentActor !== playerIndex) return { ok: false, error: "\u672A\u8F6E\u5230\u4F60" };
+  const player = extra.players[playerIndex];
+  if (player.roundBet < extra.currentBet) return { ok: false, error: "\u9700\u8981\u8DDF\u6CE8\u6216\u52A0\u6CE8" };
+  const players = extra.players.map(
+    (p, i) => i === playerIndex ? { ...p, acted: true } : p
+  );
+  const next = nextActor(extra, playerIndex);
+  const newExtra = { ...extra, players, currentActor: next };
+  if (next < 0 || allActedAndLevel(newExtra)) {
+    return advancePhase(newExtra);
+  }
+  return { ok: true, extra: pushSnapshot(newExtra) };
+}
+function holdemFold(extra, playerIndex) {
+  if (!extra.started) return { ok: false, error: "\u6E38\u620F\u5C1A\u672A\u5F00\u59CB" };
+  if (extra.currentActor !== playerIndex) return { ok: false, error: "\u672A\u8F6E\u5230\u4F60" };
+  const players = extra.players.map(
+    (p, i) => i === playerIndex ? { ...p, folded: true, acted: true } : p
+  );
+  const remaining = players.filter((p) => !p.folded);
+  if (remaining.length === 1) {
+    return {
+      ok: true,
+      extra: pushSnapshot({
+        ...extra,
+        players,
+        phase: "showdown",
+        currentActor: -1,
+        turnOrder: []
+      })
+    };
+  }
+  const next = nextActor(extra, playerIndex);
+  const newExtra = { ...extra, players, currentActor: next };
+  if (next < 0 || allActedAndLevel(newExtra)) {
+    return advancePhase(newExtra);
+  }
+  return { ok: true, extra: pushSnapshot(newExtra) };
+}
+function holdemAllIn(extra, playerIndex) {
+  if (!extra.started) return { ok: false, error: "\u6E38\u620F\u5C1A\u672A\u5F00\u59CB" };
+  if (extra.currentActor !== playerIndex) return { ok: false, error: "\u672A\u8F6E\u5230\u4F60" };
+  const player = extra.players[playerIndex];
+  const amount = player.chips;
+  if (amount <= 0) return { ok: false, error: "\u6CA1\u6709\u7B79\u7801\u53EF\u63A8" };
+  const players = extra.players.map((p, i) => {
+    if (i !== playerIndex) return extra.currentBet > 0 && p.roundBet < extra.currentBet ? { ...p, acted: false } : p;
+    return { ...p, chips: 0, roundBet: p.roundBet + amount, totalBet: p.totalBet + amount, acted: true, allIned: true };
+  });
+  const newCurrentBet = Math.max(extra.currentBet, players[playerIndex].roundBet);
+  let sidePots = extra.sidePots;
+  if (extra.sidePotEnabled) {
+    sidePots = computeSidePots(players, extra.pot + amount);
+  }
+  const next = nextActor(extra, playerIndex);
+  const newExtra = {
+    ...extra,
+    players,
+    pot: extra.pot + amount,
+    currentBet: newCurrentBet,
+    currentActor: next,
+    sidePots
+  };
+  if (next < 0 || allActedAndLevel(newExtra)) {
+    return advancePhase(newExtra);
+  }
+  return { ok: true, extra: pushSnapshot(newExtra) };
+}
+function advancePhase(extra) {
+  var _a;
+  const canAct = extra.players.filter((p) => !p.folded && !p.allIned).length;
+  if (canAct <= 1) {
+    const pushed2 = pushSnapshot({ ...extra, phase: "showdown", currentActor: -1, turnOrder: [], roundUndoUsed: false, undoRequest: null });
+    return { ok: true, extra: { ...pushed2, roundStartIndex: pushed2.historyIndex } };
+  }
+  const nextPhase = {
+    preflop: "flop",
+    flop: "turn",
+    turn: "river",
+    river: "showdown",
+    showdown: "showdown"
+  };
+  const phase = (_a = nextPhase[extra.phase]) != null ? _a : "showdown";
+  if (phase === "showdown") {
+    const pushed2 = pushSnapshot({ ...extra, phase, currentActor: -1, turnOrder: [], roundUndoUsed: false, undoRequest: null });
+    return { ok: true, extra: { ...pushed2, roundStartIndex: pushed2.historyIndex } };
+  }
+  const players = extra.players.map((p) => ({ ...p, acted: false, roundBet: 0 }));
+  const sbIdx = (extra.dealerIndex + 1) % players.length;
+  const startIdx = nextActor({ ...extra, players }, sbIdx);
+  const turnOrder = buildTurnOrder(players, startIdx >= 0 ? startIdx : sbIdx);
+  const pushed = pushSnapshot({
+    ...extra,
+    phase,
+    players,
+    currentBet: 0,
+    currentActor: startIdx >= 0 ? startIdx : sbIdx,
+    turnOrder,
+    roundUndoUsed: false,
+    undoRequest: null
+  });
+  return { ok: true, extra: { ...pushed, roundStartIndex: pushed.historyIndex } };
+}
+function computeSidePots(players, totalPot) {
+  const activePlayers = players.map((p, i) => ({ i, totalBet: p.totalBet })).filter((x) => !players[x.i].folded).sort((a, b) => a.totalBet - b.totalBet);
+  if (activePlayers.length <= 1) return [];
+  const pots = [];
+  let prevAmount = 0;
+  let remaining = totalPot;
+  for (let j = 0; j < activePlayers.length; j++) {
+    const current = activePlayers[j];
+    const diff = current.totalBet - prevAmount;
+    if (diff <= 0) continue;
+    const eligible = activePlayers.slice(j).map((x) => x.i);
+    const potShare = diff * eligible.length;
+    if (potShare > 0 && potShare <= remaining) {
+      pots.push({ amount: potShare, eligible });
+      remaining -= potShare;
+    }
+    prevAmount = current.totalBet;
+  }
+  if (remaining > 0 && pots.length > 0) {
+    pots[pots.length - 1].amount += remaining;
+  }
+  return pots;
+}
+function takeMoney(extra, playerIndex, amount) {
+  if (extra.phase !== "showdown") return { ok: false, error: "\u53EA\u80FD\u5728 showdown \u540E\u53D6\u94B1" };
+  if (amount <= 0) return { ok: false, error: "\u91D1\u989D\u5FC5\u987B\u5927\u4E8E 0" };
+  if (amount > extra.pot) return { ok: false, error: "\u5956\u6C60\u4F59\u989D\u4E0D\u8DB3" };
+  const players = extra.players.map(
+    (p, i) => i === playerIndex ? { ...p, chips: p.chips + amount } : p
+  );
+  return {
+    ok: true,
+    extra: { ...extra, players, pot: extra.pot - amount }
+  };
+}
+function giveMoney(extra, fromIndex, toIndex, amount) {
+  if (fromIndex === toIndex) return { ok: false, error: "\u4E0D\u80FD\u8F6C\u7ED9\u81EA\u5DF1" };
+  if (amount <= 0) return { ok: false, error: "\u91D1\u989D\u5FC5\u987B\u5927\u4E8E 0" };
+  const from = extra.players[fromIndex];
+  if (!from) return { ok: false, error: "\u8F6C\u51FA\u73A9\u5BB6\u4E0D\u5B58\u5728" };
+  if (amount > from.chips) return { ok: false, error: "\u7B79\u7801\u4E0D\u8DB3" };
+  const players = extra.players.map((p, i) => {
+    if (i === fromIndex) return { ...p, chips: p.chips - amount };
+    if (i === toIndex) return { ...p, chips: p.chips + amount };
+    return p;
+  });
+  return { ok: true, extra: { ...extra, players } };
+}
+function borrowMoney(extra, playerIndex, amount) {
+  if (!extra.borrowEnabled) return { ok: false, error: "\u672A\u542F\u7528\u94F6\u884C\u501F\u8D37" };
+  const borrowAmount = amount != null ? amount : extra.borrowAmount;
+  if (borrowAmount <= 0) return { ok: false, error: "\u501F\u8D37\u91D1\u989D\u5FC5\u987B\u5927\u4E8E 0" };
+  const player = extra.players[playerIndex];
+  if (extra.borrowLimit > 0 && player.borrowUsed + borrowAmount > extra.borrowLimit) {
+    return { ok: false, error: `\u5DF2\u8FBE\u5230\u501F\u8D37\u4E0A\u9650 ${extra.borrowLimit}` };
+  }
+  const players = extra.players.map(
+    (p, i) => i === playerIndex ? { ...p, chips: p.chips + borrowAmount, borrowUsed: p.borrowUsed + borrowAmount } : p
+  );
+  return { ok: true, extra: { ...extra, players } };
+}
+function repayMoney(extra, playerIndex, amount) {
+  const player = extra.players[playerIndex];
+  const repayAmount = amount != null ? amount : player.borrowUsed;
+  if (repayAmount <= 0) return { ok: false, error: "\u8FD8\u6B3E\u91D1\u989D\u5FC5\u987B\u5927\u4E8E 0" };
+  if (repayAmount > player.borrowUsed) return { ok: false, error: "\u8FD8\u6B3E\u91D1\u989D\u4E0D\u80FD\u8D85\u8FC7\u5DF2\u501F\u989D\u5EA6" };
+  if (repayAmount > player.chips) return { ok: false, error: "\u7B79\u7801\u4E0D\u8DB3" };
+  const players = extra.players.map(
+    (p, i) => i === playerIndex ? { ...p, chips: p.chips - repayAmount, borrowUsed: p.borrowUsed - repayAmount } : p
+  );
+  return { ok: true, extra: { ...extra, players } };
+}
+function requestUndo(extra, playerIndex) {
+  if (!extra.started) return { ok: false, error: "\u6E38\u620F\u5C1A\u672A\u5F00\u59CB" };
+  if (extra.roundUndoUsed) return { ok: false, error: "\u672C\u8F6E\u5DF2\u7528\u8FC7\u64A4\u56DE" };
+  if (extra.undoRequest) return { ok: false, error: "\u5DF2\u6709\u64A4\u56DE\u7533\u8BF7\u5F85\u5BA1\u6279" };
+  const player = extra.players[playerIndex];
+  if (!player.acted) return { ok: false, error: "\u4F60\u672C\u8F6E\u5C1A\u672A\u884C\u52A8" };
+  const snapshotIndex = extra.roundStartIndex;
+  return {
+    ok: true,
+    extra: {
+      ...extra,
+      undoRequest: { fromIndex: playerIndex, fromName: player.name || `\u73A9\u5BB6${playerIndex + 1}`, snapshotIndex, pending: true }
+    }
+  };
+}
+function approveUndo(extra) {
+  var _a;
+  if (!((_a = extra.undoRequest) == null ? void 0 : _a.pending)) return { ok: false, error: "\u6CA1\u6709\u5F85\u5BA1\u6279\u7684\u64A4\u56DE\u7533\u8BF7" };
+  const snapshotIndex = extra.undoRequest.snapshotIndex;
+  const snapStr = extra.history[snapshotIndex];
+  if (!snapStr) return { ok: false, error: "\u5FEB\u7167\u4E0D\u5B58\u5728" };
+  const restored = JSON.parse(snapStr);
+  restored.roundUndoUsed = true;
+  restored.undoRequest = null;
+  return { ok: true, extra: restored };
+}
+function rejectUndo(extra) {
+  var _a;
+  if (!((_a = extra.undoRequest) == null ? void 0 : _a.pending)) return { ok: false, error: "\u6CA1\u6709\u5F85\u5BA1\u6279\u7684\u64A4\u56DE\u7533\u8BF7" };
+  return { ok: true, extra: { ...extra, undoRequest: null } };
+}
+function newHand(extra) {
+  if (extra.pot > 0) return { ok: false, error: "\u5956\u6C60\u672A\u53D6\u5B8C\uFF0C\u4E0D\u80FD\u5F00\u65B0\u5C40" };
+  const n = extra.players.length;
+  const cfg = {
+    sb: extra.sbAmount,
+    bb: extra.bbAmount,
+    startingChips: 0,
+    // not used
+    borrowEnabled: extra.borrowEnabled,
+    borrowAmount: extra.borrowAmount,
+    borrowLimit: extra.borrowLimit,
+    sidePotEnabled: extra.sidePotEnabled,
+    blindsEnabled: extra.blindsEnabled
+  };
+  const newDealer = (extra.dealerIndex + 1) % n;
+  let e = initExtraWithDealer(n, newDealer, cfg);
+  e.players = e.players.map((p, i) => ({
+    ...p,
+    chips: extra.players[i].chips,
+    borrowUsed: extra.players[i].borrowUsed
+  }));
+  return { ok: true, extra: postBlinds(e) };
+}
+function endGame(extra) {
+  const players = extra.players.map((p) => {
+    if (p.borrowUsed > 0 && p.chips >= p.borrowUsed) {
+      return { ...p, chips: p.chips - p.borrowUsed, borrowUsed: 0 };
+    }
+    if (p.borrowUsed > 0) {
+      const repay = Math.min(p.chips, p.borrowUsed);
+      return { ...p, chips: p.chips - repay, borrowUsed: p.borrowUsed - repay };
+    }
+    return p;
+  });
+  return { ok: true, extra: { ...extra, players, started: false, phase: "showdown", currentActor: -1 } };
+}
+
 // src/core/reducer.ts
 function reducer(state, action) {
   switch (action.type) {
@@ -4001,6 +4443,38 @@ function reducer(state, action) {
       return handleBattleshipConfirm(state, action);
     case "battleship_fire":
       return handleBattleshipFire(state, action);
+    case "holdem_init":
+      return handleHoldemInit(state, action);
+    case "holdem_bet":
+      return handleHoldemBet(state, action);
+    case "holdem_call":
+      return handleHoldemSimple(state, action, holdemCall);
+    case "holdem_raise":
+      return handleHoldemRaise(state, action);
+    case "holdem_check":
+      return handleHoldemSimple(state, action, holdemCheck);
+    case "holdem_fold":
+      return handleHoldemSimple(state, action, holdemFold);
+    case "holdem_all_in":
+      return handleHoldemSimple(state, action, holdemAllIn);
+    case "holdem_take_money":
+      return handleHoldemTakeMoney(state, action);
+    case "holdem_borrow":
+      return handleHoldemBorrow(state, action);
+    case "holdem_repay":
+      return handleHoldemRepay(state, action);
+    case "holdem_give_money":
+      return handleHoldemGiveMoney(state, action);
+    case "holdem_request_undo":
+      return handleHoldemSimple(state, action, requestUndo);
+    case "holdem_approve_undo":
+      return handleHoldemSimple(state, action, approveUndo);
+    case "holdem_reject_undo":
+      return handleHoldemSimple(state, action, rejectUndo);
+    case "holdem_new_hand":
+      return handleHoldemSimple(state, action, newHand);
+    case "holdem_end_game":
+      return handleHoldemEndGame(state, action);
     default:
       return state;
   }
@@ -4152,6 +4626,127 @@ function handleBattleshipFire(state, action) {
   }
   return next;
 }
+function ensureHoldem(state) {
+  var _a;
+  return (_a = state.extra) != null ? _a : null;
+}
+function applyHoldem(state, extra) {
+  return { ...state, version: state.version + 1, extra };
+}
+function handleHoldemInit(state, action) {
+  var _a;
+  if (state.phase !== "idle") return state;
+  const payload = action.payload;
+  if (!payload) return state;
+  const playerList = (_a = payload.players) != null ? _a : [];
+  const extra = initHoldemExtra(playerList.length, payload);
+  extra.players = extra.players.map((p, i) => {
+    var _a2, _b;
+    return {
+      ...p,
+      name: (_b = (_a2 = playerList[i]) == null ? void 0 : _a2.name) != null ? _b : `\u73A9\u5BB6${i + 1}`
+    };
+  });
+  const startedExtra = postBlinds(extra);
+  return {
+    ...state,
+    version: state.version + 1,
+    extra: startedExtra,
+    players: startedExtra.players.map((p, i) => ({
+      index: p.index,
+      name: p.name,
+      hand: [],
+      handCount: 0,
+      isHost: i === 0,
+      isDisconnected: false,
+      extra: { chips: p.chips, roundBet: p.roundBet, totalBet: p.totalBet, folded: p.folded, allIned: p.allIned, borrowUsed: p.borrowUsed }
+    })),
+    currentTurn: startedExtra.currentActor >= 0 ? startedExtra.currentActor : 0,
+    phase: "playing"
+  };
+}
+function handleHoldemBet(state, action) {
+  var _a, _b;
+  const extra = ensureHoldem(state);
+  if (!extra) return state;
+  const amount = (_b = (_a = action.payload) == null ? void 0 : _a.amount) != null ? _b : 0;
+  const r = holdemBet(extra, action.playerIndex, amount);
+  if (!r.ok) return state;
+  return syncHoldemPlayers(applyHoldem(state, r.extra));
+}
+function handleHoldemSimple(state, action, fn) {
+  const extra = ensureHoldem(state);
+  if (!extra) return state;
+  const r = fn(extra, action.playerIndex);
+  if (!r.ok) return state;
+  const result = applyHoldem(state, r.extra);
+  return syncHoldemPlayers(result);
+}
+function handleHoldemRaise(state, action) {
+  var _a, _b;
+  const extra = ensureHoldem(state);
+  if (!extra) return state;
+  const amount = (_b = (_a = action.payload) == null ? void 0 : _a.amount) != null ? _b : 0;
+  const r = holdemRaise(extra, action.playerIndex, amount);
+  if (!r.ok) return state;
+  return syncHoldemPlayers(applyHoldem(state, r.extra));
+}
+function handleHoldemTakeMoney(state, action) {
+  var _a, _b;
+  const extra = ensureHoldem(state);
+  if (!extra) return state;
+  const amount = (_b = (_a = action.payload) == null ? void 0 : _a.amount) != null ? _b : 0;
+  const r = takeMoney(extra, action.playerIndex, amount);
+  if (!r.ok) return state;
+  return syncHoldemPlayers(applyHoldem(state, r.extra));
+}
+function handleHoldemBorrow(state, action) {
+  var _a;
+  const extra = ensureHoldem(state);
+  if (!extra) return state;
+  const amount = (_a = action.payload) == null ? void 0 : _a.amount;
+  const r = borrowMoney(extra, action.playerIndex, amount);
+  if (!r.ok) return state;
+  return syncHoldemPlayers(applyHoldem(state, r.extra));
+}
+function handleHoldemRepay(state, action) {
+  var _a;
+  const extra = ensureHoldem(state);
+  if (!extra) return state;
+  const amount = (_a = action.payload) == null ? void 0 : _a.amount;
+  const r = repayMoney(extra, action.playerIndex, amount);
+  if (!r.ok) return state;
+  return syncHoldemPlayers(applyHoldem(state, r.extra));
+}
+function handleHoldemGiveMoney(state, action) {
+  const extra = ensureHoldem(state);
+  if (!extra) return state;
+  const payload = action.payload;
+  if (payload === void 0 || typeof payload.toIndex !== "number" || typeof payload.amount !== "number") return state;
+  const r = giveMoney(extra, action.playerIndex, payload.toIndex, payload.amount);
+  if (!r.ok) return state;
+  return syncHoldemPlayers(applyHoldem(state, r.extra));
+}
+function handleHoldemEndGame(state, _action) {
+  const extra = ensureHoldem(state);
+  if (!extra) return state;
+  const r = endGame(extra);
+  if (!r.ok) return state;
+  return { ...syncHoldemPlayers(applyHoldem(state, r.extra)), phase: "ended" };
+}
+function syncHoldemPlayers(state) {
+  const extra = state.extra;
+  if (!extra) return state;
+  const players = state.players.map((p, i) => {
+    const hp = extra.players[i];
+    if (!hp) return p;
+    return {
+      ...p,
+      extra: { chips: hp.chips, roundBet: hp.roundBet, totalBet: hp.totalBet, folded: hp.folded, allIned: hp.allIned, borrowUsed: hp.borrowUsed }
+    };
+  });
+  return { ...state, players, currentTurn: extra.currentActor >= 0 ? extra.currentActor : state.currentTurn };
+}
 
 // src/core/l3Inline.ts
 var L3Inline = class {
@@ -4238,7 +4833,7 @@ var GameEngine = class {
     const errors = [];
     const { l1, l2 } = config;
     if (!(l1 == null ? void 0 : l1.cards) || l1.cards.length === 0) {
-      errors.push({ level: "error", path: "l1.cards", message: "\u5361\u724C\u5217\u8868\u4E0D\u80FD\u4E3A\u7A7A" });
+      errors.push({ level: "warning", path: "l1.cards", message: "\u5361\u724C\u5217\u8868\u4E3A\u7A7A\uFF08\u5B9E\u4F53\u724C\u6E38\u620F\uFF09" });
     }
     if (!(l1 == null ? void 0 : l1.players) || l1.players.count < 2) {
       errors.push({ level: "error", path: "l1.players.count", message: "\u81F3\u5C11\u9700\u89812\u540D\u73A9\u5BB6" });
@@ -4651,6 +5246,244 @@ var battleshipTest = {
   config: { ...config_default, l3: l3Script }
 };
 
+// src/games/holdem/config.json
+var config_default2 = {
+  meta: {
+    name: "\u5FB7\u5DDE\u6251\u514B",
+    version: "1.0",
+    maxPlayers: 99
+  },
+  l1: {
+    cards: [],
+    players: {
+      count: 99,
+      initialResources: {
+        chips: 300
+      }
+    },
+    uiLayout: {
+      slots: {
+        table: { component: "holdem_table" },
+        actions: { component: "holdem_actions" }
+      },
+      presetSlots: ["table", "actions"]
+    },
+    visibility: {
+      "players[*].hand": { mode: "hidden", description: "\u5B9E\u4F53\u724C\uFF0C\u4E0D\u663E\u793A" },
+      "players[*].extra": { mode: "full", description: "\u7B79\u7801\u4FE1\u606F\u516C\u5F00" }
+    }
+  },
+  l2: {
+    rules: [
+      {
+        trigger: "on_init",
+        actions: [{ type: "holdem_init" }]
+      },
+      {
+        trigger: "on_bet",
+        actions: [{ type: "holdem_bet" }]
+      },
+      {
+        trigger: "on_call",
+        actions: [{ type: "holdem_call" }]
+      },
+      {
+        trigger: "on_raise",
+        actions: [{ type: "holdem_raise" }]
+      },
+      {
+        trigger: "on_check",
+        actions: [{ type: "holdem_check" }]
+      },
+      {
+        trigger: "on_fold",
+        actions: [{ type: "holdem_fold" }]
+      },
+      {
+        trigger: "on_all_in",
+        actions: [{ type: "holdem_all_in" }]
+      },
+      {
+        trigger: "on_take_money",
+        actions: [{ type: "holdem_take_money" }]
+      },
+      {
+        trigger: "on_borrow",
+        actions: [{ type: "holdem_borrow" }]
+      },
+      {
+        trigger: "on_give_money",
+        actions: [{ type: "holdem_give_money" }]
+      },
+      {
+        trigger: "on_request_undo",
+        actions: [{ type: "holdem_request_undo" }]
+      },
+      {
+        trigger: "on_approve_undo",
+        actions: [{ type: "holdem_approve_undo" }]
+      },
+      {
+        trigger: "on_reject_undo",
+        actions: [{ type: "holdem_reject_undo" }]
+      },
+      {
+        trigger: "on_new_hand",
+        actions: [{ type: "holdem_new_hand" }]
+      },
+      {
+        trigger: "on_end_game",
+        actions: [{ type: "holdem_end_game" }]
+      }
+    ]
+  },
+  l3: null
+};
+
+// src/games/holdem/l3.ts
+var l3Script2 = `
+// ---------- \u524D\u7F6E\u6821\u9A8C ----------
+
+function validateAction(oldState, _newState, action) {
+  if (!action || typeof action !== 'object') return false;
+  var extra = oldState && oldState.extra;
+
+  switch (action.type) {
+    case 'holdem_init':
+      return oldState.phase === 'idle' && (!extra || !extra.started);
+
+    case 'holdem_bet': {
+      if (!extra || !extra.started) return false;
+      if (extra.currentActor !== action.playerIndex) return false;
+      var amount = (action.payload && action.payload.amount) || 0;
+      if (amount <= 0) return false;
+      if (extra.currentBet !== 0) return false;
+      if (extra.players[action.playerIndex].chips < amount) return false;
+      return true;
+    }
+
+    case 'holdem_call': {
+      if (!extra || !extra.started) return false;
+      if (extra.currentActor !== action.playerIndex) return false;
+      return true;
+    }
+
+    case 'holdem_raise': {
+      if (!extra || !extra.started) return false;
+      if (extra.currentActor !== action.playerIndex) return false;
+      var amount = (action.payload && action.payload.amount) || 0;
+      var player = extra.players[action.playerIndex];
+      if (amount <= player.roundBet) return false;
+      if (extra.currentBet === 0) return false;
+      if (amount < extra.currentBet * 2) return false;
+      if (amount - player.roundBet > player.chips) return false;
+      return true;
+    }
+
+    case 'holdem_check': {
+      if (!extra || !extra.started) return false;
+      if (extra.currentActor !== action.playerIndex) return false;
+      var player = extra.players[action.playerIndex];
+      if (player.roundBet < extra.currentBet) return false;
+      return true;
+    }
+
+    case 'holdem_fold': {
+      if (!extra || !extra.started) return false;
+      if (extra.currentActor !== action.playerIndex) return false;
+      return true;
+    }
+
+    case 'holdem_all_in': {
+      if (!extra || !extra.started) return false;
+      if (extra.currentActor !== action.playerIndex) return false;
+      if (extra.players[action.playerIndex].chips <= 0) return false;
+      return true;
+    }
+
+    case 'holdem_take_money': {
+      if (!extra || extra.phase !== 'showdown') return false;
+      var amount = (action.payload && action.payload.amount) || 0;
+      if (amount <= 0 || amount > extra.pot) return false;
+      return true;
+    }
+
+    case 'holdem_borrow': {
+      if (!extra || !extra.borrowEnabled) return false;
+      return true;
+    }
+
+    case 'holdem_repay': {
+      if (!extra) return false;
+      var amount = (action.payload && action.payload.amount) || 0;
+      if (amount <= 0) return false;
+      if (amount > extra.players[action.playerIndex].borrowUsed) return false;
+      if (amount > extra.players[action.playerIndex].chips) return false;
+      return true;
+    }
+
+    case 'holdem_give_money': {
+      var amount = (action.payload && action.payload.amount) || 0;
+      var toIndex = (action.payload && action.payload.toIndex);
+      if (amount <= 0) return false;
+      if (toIndex === undefined || toIndex === action.playerIndex) return false;
+      if (!extra || !extra.players[action.playerIndex]) return false;
+      if (extra.players[action.playerIndex].chips < amount) return false;
+      return true;
+    }
+
+    case 'holdem_request_undo': {
+      if (!extra || !extra.started) return false;
+      if (extra.roundUndoUsed) return false;
+      if (extra.undoRequest) return false;
+      if (!extra.players[action.playerIndex].acted) return false;
+      return true;
+    }
+
+    case 'holdem_approve_undo':
+    case 'holdem_reject_undo':
+      return true;
+
+    case 'holdem_new_hand': {
+      if (extra && extra.pot > 0) return false;
+      return true;
+    }
+    case 'holdem_end_game':
+      return true;
+
+    default:
+      return true;
+  }
+}
+
+// ---------- \u94A9\u5B50 ----------
+
+game.on('before_action', function (state, action) {
+  console.log('[Holdem L3] before_action: ' + action.type + ' by ' + action.playerIndex);
+});
+
+game.on('after_state_update', function (state) {
+  var extra = state.extra;
+  var phase = extra ? extra.phase : '?';
+  var actor = extra ? extra.currentActor : -1;
+  console.log('[Holdem L3] after_state_update: phase=' + phase + ' actor=' + actor);
+});
+
+// ---------- \u6CE8\u518C ----------
+
+registerFunction('validate_action', validateAction);
+`;
+
+// src/games/holdem/test.ts
+var holdemTest = {
+  id: "holdem",
+  name: "\u5FB7\u5DDE\u6251\u514B",
+  description: "\u5B9E\u4F53\u724C\u7B79\u7801\u7BA1\u7406 \xB7 \u670B\u53CB\u5C40",
+  playerCount: "2~99",
+  ready: true,
+  config: { ...config_default2, l3: l3Script2 }
+};
+
 // src/games/battleship/view.ts
 function stripShips(board) {
   return {
@@ -4667,6 +5500,11 @@ function filterExtra(extra, viewerIndex) {
     log: (_a = extra.log) != null ? _a : [],
     boards: extra.boards.map((b, i) => i === viewerIndex ? b : stripShips(b))
   };
+}
+
+// src/games/holdem/view.ts
+function filterExtra2(extra, _viewerIndex) {
+  return extra;
 }
 
 // scripts/host-server.ts
@@ -4688,6 +5526,13 @@ var GAMES = [{
   description: "\u53CC\u4EBA\u7B56\u7565\u6D77\u6218",
   minPlayers: 2,
   maxPlayers: 2,
+  ready: true
+}, {
+  id: holdemTest.id,
+  name: holdemTest.name,
+  description: "\u5B9E\u4F53\u724C\u7B79\u7801\u7BA1\u7406 \xB7 \u670B\u53CB\u5C40",
+  minPlayers: 2,
+  maxPlayers: 99,
   ready: true
 }];
 var seq = 0;
@@ -4808,28 +5653,58 @@ function startSession(gameId, seats) {
     log(`\u672A\u77E5\u6E38\u620F: ${gameId}`);
     return;
   }
-  const players = seats.filter((s2) => s2.seat === "player");
+  const players = seats.filter((s) => s.seat === "player");
   if (players.length < meta.minPlayers || players.length > meta.maxPlayers) {
     log(`\u6E38\u620F\u4F4D\u6570\u91CF\u4E0D\u7B26: \u5141\u8BB8 ${meta.minPlayers}~${meta.maxPlayers}\uFF0C\u5B9E\u9645 ${players.length}`);
     return;
   }
   const engine = new GameEngine(s0);
-  const config = battleshipTest.config;
-  const errs = engine.loadGame(config);
-  if (errs.filter((e) => e.level === "error").length > 0) {
-    log(`\u914D\u7F6E\u9519\u8BEF: ${errs.map((e) => e.message).join("; ")}`);
+  if (gameId === "battleship") {
+    const config = battleshipTest.config;
+    const errs = engine.loadGame(config);
+    if (errs.filter((e) => e.level === "error").length > 0) {
+      log(`\u914D\u7F6E\u9519\u8BEF: ${errs.map((e) => e.message).join("; ")}`);
+      return;
+    }
+    engine.startGame(players.length);
+    const s = engine.getState();
+    engine.loadState({ ...s, extra: initBoards(players.length), phase: "idle" });
+  } else if (gameId === "holdem") {
+    const config = holdemTest.config;
+    const errs = engine.loadGame(config);
+    if (errs.filter((e) => e.level === "error").length > 0) {
+      log(`\u914D\u7F6E\u9519\u8BEF: ${errs.map((e) => e.message).join("; ")}`);
+      return;
+    }
+    const playerNames = players.map((s) => {
+      var _a;
+      const c = Array.from(conns.values()).find((x) => x.player.id === s.playerId);
+      return (_a = c == null ? void 0 : c.player.name) != null ? _a : `\u73A9\u5BB6${s.playerId}`;
+    });
+    const initState = {
+      ...s0,
+      players: players.map((_p, i) => ({
+        index: i,
+        name: playerNames[i],
+        hand: [],
+        handCount: 0,
+        isHost: i === 0,
+        isDisconnected: false,
+        extra: {}
+      }))
+    };
+    engine.loadState(initState);
+  } else {
+    log(`\u4E0D\u652F\u6301\u7684 gameId: ${gameId}`);
     return;
   }
-  engine.startGame(players.length);
-  const s = engine.getState();
-  engine.loadState({ ...s, extra: initBoards(players.length), phase: "idle" });
   const seatMap = /* @__PURE__ */ new Map();
   players.forEach((p, i) => seatMap.set(p.playerId, i));
   session = {
     gameId,
     engine,
     seats: seatMap,
-    spectators: seats.filter((s2) => s2.seat === "spectator").map((s2) => s2.playerId),
+    spectators: seats.filter((s) => s.seat === "spectator").map((s) => s.playerId),
     pendingReconnect: null,
     pendingTimer: null
   };
@@ -4848,6 +5723,13 @@ function broadcastGameState() {
     const v = session.engine.buildPlayerView(idx);
     const ex = state.extra;
     if (ex && Array.isArray(ex.boards)) v.extra = filterExtra(ex, idx);
+    else if (session.gameId === "holdem") {
+      if (state.extra && state.extra.players) {
+        v.extra = filterExtra2(state.extra, idx);
+      } else {
+        v.extra = { players: state.players.map((p) => ({ index: p.index, name: p.name, chips: 0, roundBet: 0, totalBet: 0, folded: false, allIned: false, acted: false, borrowUsed: 0 })), started: false };
+      }
+    }
     send(c.ws, { type: "game_state", payload: { enc: encryptText(JSON.stringify(v)) } });
   }
   const spectate = {

@@ -15,6 +15,7 @@ import { ToastManager } from '../views/ToastView';
 import { encryptText, decryptText } from '../core/crypto';
 import { LobbyView } from '../views/LobbyView';
 import { BattleView } from '../views/BattleView';
+import { HoldemView } from '../views/HoldemView';
 import { SpectatorView, type SpectateData } from '../views/SpectatorView';
 import { KeepAliveView } from '../views/KeepAliveView';
 import { logView } from '../views/LogView';
@@ -32,6 +33,7 @@ const WS_URL = params.get('ws') === '1' || params.get('ws') === null
 const app = document.getElementById('app')!;
 const lobbyView = new LobbyView(app);
 const battleView = new BattleView(app);
+const holdemView = new HoldemView(app);
 const spectatorView = new SpectatorView(app);
 const keepAliveView = new KeepAliveView(app);
 
@@ -51,19 +53,23 @@ let encKey = params.get('key') ?? '';   // 对局加密密钥（URL 或 lobby_st
 function showLobby(): void {
   lobbyView.mount();
   battleView.destroy();
+  holdemView.destroy();
   spectatorView.destroy();
   inGame = false;
   mySeat = null;
 }
 
 function showGame(v: PlayerView): void {
-  const extra = v.extra as { boards?: unknown[] } | undefined;
+  const extra = v.extra as { boards?: unknown[]; players?: unknown[]; phase?: string } | undefined;
   if (extra && Array.isArray(extra.boards)) {
     battleView.amHost = amHost;
     battleView.render(v);
     battleView.mount();
+  } else if (extra && Array.isArray(extra.players)) {
+    holdemView.amHost = amHost;
+    holdemView.render(v);
+    holdemView.mount();
   } else {
-    // 通用游戏视图（未来游戏库扩展用）
     ToastManager.show(`游戏类型不支持: ${currentGameId}`);
   }
 }
@@ -153,6 +159,7 @@ function handleMsg(msg: { type: string; payload?: unknown }): void {
         }
       }
       battleView.setConnState(map);
+      holdemView.setConnState(map);
       spectatorView.setConnState(map);
       break;
     }

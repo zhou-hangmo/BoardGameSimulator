@@ -12,9 +12,12 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GameEngine } from '../src/core/engine';
 import { battleshipTest } from '../src/games/battleship/test';
+import { holdemTest } from '../src/games/holdem/test';
 import { initBoards } from '../src/games/battleship/rules';
 import { filterExtra } from '../src/games/battleship/view';
+import { filterExtra as filterHoldem } from '../src/games/holdem/view';
 import type { BattleshipExtra } from '../src/games/battleship/rules';
+import type { HoldemExtra } from '../src/games/holdem/rules';
 import type { GameState, GameAction, PlayerView } from '../src/core/types';
 import type { GameMeta, LobbyState, LobbyPlayer, SeatAssign, GameStarted, ClientMsg } from '../src/core/lobbyTypes';
 
@@ -41,6 +44,13 @@ const GAMES: GameMeta[] = [{
   description: '双人策略海战',
   minPlayers: 2,
   maxPlayers: 2,
+  ready: true,
+}, {
+  id: holdemTest.id,
+  name: holdemTest.name,
+  description: '实体牌筹码管理 · 朋友局',
+  minPlayers: 2,
+  maxPlayers: 99,
   ready: true,
 }];
 
@@ -199,15 +209,46 @@ function startSession(gameId: string, seats: SeatAssign[]): void {
     return;
   }
   const engine = new GameEngine(s0);
-  const config = battleshipTest.config;
-  const errs = engine.loadGame(config);
-  if (errs.filter(e => e.level === 'error').length > 0) {
-    log(`配置错误: ${errs.map(e => e.message).join('; ')}`);
+
+  if (gameId === 'battleship') {
+    const config = battleshipTest.config;
+    const errs = engine.loadGame(config);
+    if (errs.filter(e => e.level === 'error').length > 0) {
+      log(`配置错误: ${errs.map(e => e.message).join('; ')}`);
+      return;
+    }
+    engine.startGame(players.length);
+    const s = engine.getState();
+    engine.loadState({ ...s, extra: initBoards(players.length), phase: 'idle' });
+  } else if (gameId === 'holdem') {
+    const config = holdemTest.config;
+    const errs = engine.loadGame(config);
+    if (errs.filter(e => e.level === 'error').length > 0) {
+      log(`配置错误: ${errs.map(e => e.message).join('; ')}`);
+      return;
+    }
+    // holdem 不通过 engine.startGame，等待客户端发送 holdem_init
+    const playerNames = players.map(s => {
+      const c = Array.from(conns.values()).find(x => x.player.id === s.playerId);
+      return c?.player.name ?? `玩家${s.playerId}`;
+    });
+    const initState: GameState = {
+      ...s0,
+      players: players.map((_p, i) => ({
+        index: i,
+        name: playerNames[i],
+        hand: [],
+        handCount: 0,
+        isHost: i === 0,
+        isDisconnected: false,
+        extra: {},
+      })),
+    };
+    engine.loadState(initState);
+  } else {
+    log(`不支持的 gameId: ${gameId}`);
     return;
   }
-  engine.startGame(players.length);
-  const s = engine.getState();
-  engine.loadState({ ...s, extra: initBoards(players.length), phase: 'idle' });
 
   const seatMap = new Map<string, number>();
   players.forEach((p, i) => seatMap.set(p.playerId, i));
@@ -235,7 +276,14 @@ function broadcastGameState(): void {
     if (!c) continue;
     const v: PlayerView = session.engine.buildPlayerView(idx);
     const ex = state.extra as BattleshipExtra | undefined;
-    if (ex && Array.isArray(ex.boards)) v.extra = filterExtra(ex, idx);
+    if (ex && Array.isArray((ex as BattleshipExtra).boards)) v.extra = filterExtra(ex, idx);
+    else if (session.gameId === 'holdem') {
+      if (state.extra && (state.extra as HoldemExtra).players) {
+        v.extra = filterHoldem(state.extra as HoldemExtra, idx);
+      } else {
+        v.extra = { players: state.players.map(p => ({ index: p.index, name: p.name, chips: 0, roundBet: 0, totalBet: 0, folded: false, allIned: false, acted: false, borrowUsed: 0 })), started: false };
+      }
+    }
     send(c.ws, { type: 'game_state', payload: { enc: encryptText(JSON.stringify(v)) } });
   }
   // 观战玩家：spectate 数据（加密传输）

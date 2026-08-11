@@ -76,7 +76,7 @@ export class GameEngine {
     const { l1, l2 } = config;
 
     if (!l1?.cards || l1.cards.length === 0) {
-      errors.push({ level: 'error', path: 'l1.cards', message: '卡牌列表不能为空' });
+      errors.push({ level: 'warning', path: 'l1.cards', message: '卡牌列表为空（实体牌游戏）' });
     }
     if (!l1?.players || l1.players.count < 2) {
       errors.push({ level: 'error', path: 'l1.players.count', message: '至少需要2名玩家' });
